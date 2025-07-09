@@ -92,8 +92,9 @@ You will see a colorized menu with 17 options. Select a number to perform the co
 ## Contributing
 Pull requests and suggestions are welcome! Please open an issue for bugs or feature requests.
 
-## License
-MIT License
+## License & Permissions
+Unauthorized copying, reproduction, or redistribution of this tool is strictly forbidden.
+
 
 ```
 
