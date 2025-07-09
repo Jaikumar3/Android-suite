@@ -1,5 +1,5 @@
 
-# Android Suite - Pentesting Automation Tool
+# Android Suite 
 
 A menu-driven Python tool to automate common Android application and device pentesting tasks. Designed for security professionals, researchers, and enthusiasts, it centralizes device interaction, APK analysis, Frida integration, and more into a single, easy-to-use interface.
 
