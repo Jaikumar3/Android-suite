@@ -95,6 +95,6 @@ Pull requests and suggestions are welcome! Please open an issue for bugs or feat
 ## License & Permissions
 Unauthorized copying, reproduction, or redistribution of this tool is strictly forbidden.
 
-
+Happy hacking!
 ```
 
