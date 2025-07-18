@@ -96,7 +96,7 @@ The recommended installation sets up the most common tools and a preconfigured A
 Pull requests and suggestions are welcome!
 
 ## License & Permissions
-Unauthorized copying, reproduction, or redistribution of this tool is strictly forbidden.
+- Unauthorized copying, reproduction, or redistribution of this tool is strictly forbidden.
 ---
-Happy Hacking >>>
+- Happy Hacking >>>
 **For more details, see the in-app help menu or comments in `main.py` and `installer.py`.**
