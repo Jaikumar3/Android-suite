@@ -34,7 +34,7 @@ The suite provides the following 24 features via its menu:
 21. **Run MobApp-Storage-Inspector on APK:** Analyze APK storage using MobApp-Storage-Inspector.jar.
 22. **Setup Burp Suite CA certificate:** Install Burp Suite CA certificate to Android device/emulator for HTTPS interception.
 23. **Objection Testing Suite:** Comprehensive Android app testing with Objection framework.
-24. **Create/Launch AVD with Magisk+Xposed (root, writable):** Automate AVD creation and patching with Magisk and Xposed, with writable system and root.
+24. **Create/Launch AVD with Magisk+Xposed (root, writable):** Automate AVD creation and patching with Magisk and Xposed, with writable system and root. (**not Completed Fully**)
 
 ## Quick Start
 
