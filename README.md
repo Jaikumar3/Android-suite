@@ -1,99 +1,102 @@
+# Android Pentesting Suite
 
-# Android Suite 
+**Author:** Jai  
+**Version:** 2.0.0
 
-A menu-driven Python tool to automate common Android application and device pentesting tasks. Designed for security professionals, researchers, and enthusiasts, it centralizes device interaction, APK analysis, Frida integration, and more into a single, easy-to-use interface.
+## Overview
+
+This suite automates Android app pentesting and reverse engineering tasks. It provides a menu-driven interface for installing tools, managing emulators, interacting with devices, and running common security tests.
 
 ## Features
 
-- **Install/verify tools**: One-click setup for all required tools (ADB, APKTool, Frida, APKLeaks, fridump, etc.)
-- **Get PID for package name**: Find the process ID for any installed app
-- **Install/Uninstall APK via ADB**: Quickly install or remove APKs
-- **Push/Pull files via ADB**: Transfer files between your computer and the device
-- **Collect device information**: Gather device model, OS, root status, and more
-- **Setup/Stop Frida server**: Automate Frida server deployment and management (with version checks)
-- **Get process list**: List all running processes on the device
-- **View/Save Logcat Output**: Fetch and save device logs, with filtering and line limits
-- **List installed packages**: List all package names on the device
-- **Dump APK with fridump**: Memory dump of an app using Frida and fridump
-- **APKTool decompile APK**: Decompile APKs for static analysis
-- **Run APKLeaks on APK**: Scan APKs for secrets and sensitive data
-- **Extract app data directory**: Pull `/data/data/<package>` (root required)
-- **Colorful, user-friendly menu**: All output is colorized for clarity (if `colorama` is installed)
-- **Help and input validation**: Built-in help, error handling, and input checks
+The suite provides the following 24 features via its menu:
+
+1. **Install/verify tools (open installer):** Install or verify all required tools in the ./tools directory.
+2. **Check emulator root status:** Check if connected emulator has root access and writable system partition.
+3. **Setup emulator (Play Store + Root):** Guide to setup Android emulator with Play Store and root access.
+4. **Get PID for package name:** Find the process ID for a given Android package name.
+5. **Install APK via ADB:** Install an APK file to the connected Android device using ADB.
+6. **Uninstall APK via ADB:** Uninstall an app from the device using its package name.
+7. **Push file to device via ADB:** Copy a file from your computer to the Android device.
+8. **Pull file from device via ADB:** Copy a file from the Android device to your computer.
+9. **Collect device information:** Gather information about the connected Android device.
+10. **Setup Frida server (interactive):** Interactive setup with version selection from GitHub releases.
+11. **Stop Frida server on device:** Stop/kill the Frida server process on the device.
+12. **Get process list:** List all running processes on the device.
+13. **View/Save Logcat Output:** View or save the device's logcat output.
+14. **List installed packages:** List all installed package names on the connected device.
+15. **Dump APK with fridump:** Dump an APK's memory using fridump and Frida.
+16. **APKTool decompile APK:** Decompile an APK using APKTool.
+17. **Run APKLeaks on APK:** Scan an APK for secrets using APKLeaks.
+18. **Extract app data directory:** Extract the /data/data/<package> directory from the device (root required, 10min timeout with extension option).
+19. **Run apk-components-inspector on APK:** Analyze APK components using apk-components-inspector.
+20. **Run frida-script-gen (generate Frida scripts):** Generate Frida scripts using frida-script-gen tool.
+21. **Run MobApp-Storage-Inspector on APK:** Analyze APK storage using MobApp-Storage-Inspector.jar.
+22. **Setup Burp Suite CA certificate:** Install Burp Suite CA certificate to Android device/emulator for HTTPS interception.
+23. **Objection Testing Suite:** Comprehensive Android app testing with Objection framework.
+24. **Create/Launch AVD with Magisk+Xposed (root, writable):** Automate AVD creation and patching with Magisk and Xposed, with writable system and root.
+
+## Quick Start
+
+1. **Install Python 3.8+** and ensure `pip` is available.
+2. **Clone this repository** and open the folder in VS Code or your terminal.
+3. **Run the main menu:**
+   ```powershell
+   python main.py
+   ```
+4. **Select an option** from the menu to install tools, manage emulators, or run pentesting tasks.
+
+## Installer Options
+
+When you select "Install/verify tools" from the menu, you’ll see these options:
+
+1. **Standard installation:** Python packages + Android SDK
+2. **Install Android Studio Command Line Tools**
+3. **Install Android Emulator with AVD**
+4. **Install full Android Studio IDE**
+5. **Full installation (everything)**
+6. **Verify existing installation**
+7. **Default installer**
+8. **Recommended installation (best-practice setup)**
+
+The recommended installation sets up the most common tools and a preconfigured Android 12L (Sv2) x86_64 AVD with Google APIs.
+
+## Tool List
+
+- **Android SDK, Emulator, AVD**
+- **Frida, Objection, APKTool, JADX, APKLeaks**
+- **MobApp-Storage-Inspector, Quark-Engine, APKiD**
+- **Burp Suite CA certificate automation**
+- **Magisk + Xposed for rooted/writable emulators**
+
+## Usage Examples
+
+- **Check emulator root status**
+- **Install/uninstall APKs via ADB**
+- **Extract app data directory**
+- **Run Frida/Objection tests**
+- **Decompile APKs and scan for secrets**
+- **Install Burp Suite CA certificate for HTTPS interception**
 
 ## Requirements
 
-- Python 3.7+
-- [ADB](https://developer.android.com/studio/command-line/adb) (Android Debug Bridge)
-- [colorama](https://pypi.org/project/colorama/) (optional, for color output)
-- Internet connection (for installer to fetch tools)
-
-## Setup
-
-1. **Clone or download this repository**
-2. (Optional) Create a Python virtual environment:
-   ```sh
-   python -m venv venv
-   venv\Scripts\activate  # On Windows
-   source venv/bin/activate  # On Linux/Mac
-   ```
-3. **Install Python dependencies:**
-   ```sh
-   pip install -r requirements.txt
-   ```
-4. **Run the installer to fetch all tools:**
-   ```sh
-   python main.py
-   # Then select option 1: Install/verify tools
-   ```
-
-## Usage
-
-Run the main menu:
-```sh
-python main.py
-```
-
-You will see a colorized menu with 17 options. Select a number to perform the corresponding action. Use 'h' for help, 'b' to return, or '0'/'17' to exit.
-
-### Example Menu
-```
-[  1]  Install/verify tools (open installer)
-[  2]  Get PID for package name
-[  3]  Install APK via ADB
-[  4]  Uninstall APK via ADB
-[  5]  Push file to device via ADB
-[  6]  Pull file from device via ADB
-[  7]  Collect device information
-[  8]  Setup Frida server (optional)
-[  9]  Stop Frida server on device
-[ 10]  Get process list
-[ 11]  View/Save Logcat Output
-[ 12]  List installed packages
-[ 13]  Dump APK with fridump
-[ 14]  APKTool decompile APK
-[ 15]  Run APKLeaks on APK
-[ 16]  Extract app data directory
-[ 17]  Exit
-```
-
-## Notes
-- All command logic is in `android_pentest.py`; `main.py` is menu/UI only.
-- The installer will fetch and set up all required tools in the `tools/` directory.
-- Frida server version is checked to match the host Frida tools exactly.
-- Most features work with any connected Android device (root required for some options).
-- Output is colorized if `colorama` is installed.
+- Windows, macOS, or Linux
+- Python 3.8+
+- Java 17+ (for MobApp-Storage-Inspector)
+- Android SDK tools (installed via suite)
 
 ## Troubleshooting
-- If a tool is missing or fails to install, rerun the installer (option 1).
-- For Frida features, ensure your device is rooted and USB debugging is enabled.
-- For APK analysis, provide the full path to the APK file when prompted.
+
+- If color output is missing, ensure `colorama` is installed (`pip install colorama`).
+- For Java-based tools, install Java 17+ from [Adoptium](https://adoptium.net/).
+- For Frida/Objection, ensure device is rooted or use an emulator.
 
 ## Contributing
-Pull requests and suggestions are welcome! Please open an issue for bugs or feature requests.
+
+Pull requests and suggestions are welcome!
 
 ## License & Permissions
 Unauthorized copying, reproduction, or redistribution of this tool is strictly forbidden.
-
-Happy hacking!
-``
+---
+Happy Hacking >>>
+**For more details, see the in-app help menu or comments in `main.py` and `installer.py`.**
