@@ -43,7 +43,7 @@ The suite provides the following 24 features via its menu:
 ## Quick Start
 
 1. **Install Python 3.8+** and ensure `pip` is available.
-2. **Clone this repository** and open the folder in VS Code or your terminal.
+2. **Clone this repository** and open the folder in your terminal.
 3. **Run the main menu:**
    ```powershell
    python main.py
@@ -105,5 +105,6 @@ Unauthorized copying, reproduction, or redistribution of this tool is strictly f
 
 - Happy Hacking >>>
 **For more details, see the in-app help menu or comments in `main.py` and `installer.py`.**
+
 
 
