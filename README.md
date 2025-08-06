@@ -35,6 +35,10 @@ The suite provides the following 24 features via its menu:
 22. **Setup Burp Suite CA certificate:** Install Burp Suite CA certificate to Android device/emulator for HTTPS interception.
 23. **Objection Testing Suite:** Comprehensive Android app testing with Objection framework.
 24. **Create/Launch AVD with Magisk+Xposed (root, writable):** Automate AVD creation and patching with Magisk and Xposed, with writable system and root. (**not Completed Fully**)
+25. **Sensitive Strings/Secrets Finder:** Scan APK or decompiled code for secrets using truffleHog.
+26. **Automated Backup/Restore:** Backup and restore app data using ADB (root required for some apps).
+27. **App Repackaging Utility:** Repackage APKs after modification for testing or bypassing protections.
+28. **Automated Uninstall/Cleaner:** Uninstall app and optionally clean up related files and data.
 
 ## Quick Start
 
@@ -101,4 +105,5 @@ Unauthorized copying, reproduction, or redistribution of this tool is strictly f
 
 - Happy Hacking >>>
 **For more details, see the in-app help menu or comments in `main.py` and `installer.py`.**
+
 
