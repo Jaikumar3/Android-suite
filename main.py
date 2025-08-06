@@ -16,7 +16,7 @@ try:
 except ImportError:
     COLOR_ENABLED = False
 
-VERSION = "1.0.0"
+VERSION = "2.5.0"
 
 MENU_OPTIONS = [
     ("Install/verify tools (open installer)", "Install or verify all required tools in the ./tools directory."),
@@ -33,7 +33,7 @@ MENU_OPTIONS = [
     ("Get process list", "List all running processes on the device."),
     ("View/Save Logcat Output", "View or save the device's logcat output."),
     ("List installed packages", "List all installed package names on the connected device."),
-    ("Dump APK with fridump", "Dump an APK's memory using fridump and Frida."),
+    ("Dump app memory with fridump", "Dump running app memory using fridump and Frida (requires package name/PID)."),
     ("APKTool decompile APK", "Decompile an APK using APKTool."),
     ("Run APKLeaks on APK", "Scan an APK for secrets using APKLeaks."),
     ("Extract app data directory", "Extract the /data/data/<package> directory from the device (root required, 10min timeout with extension option)."),
@@ -43,45 +43,69 @@ MENU_OPTIONS = [
     ("Setup Burp Suite CA certificate", "Install Burp Suite CA certificate to Android device/emulator for HTTPS interception."),
     ("Objection Testing Suite", "Comprehensive Android app testing with Objection framework."),
     ("Create/Launch AVD with Magisk+Xposed (root, writable)", "Automate AVD creation and patching with Magisk and Xposed, with writable system and root."),
+    ("Sensitive Strings/Secrets Finder", "Scan APK or decompiled code for sensitive strings, secrets, and credentials."),
+    ("Automated Backup/Restore", "Backup and restore app data using ADB (root required for some apps)."),
+    ("App Repackaging Utility", "Repackage APKs after modification for testing or bypassing protections."),
+    ("Automated Uninstall/Cleaner", "Uninstall app and optionally clean up related files and data."),
     ("Exit", "Exit the Android Suite."),
 ]
 
 
 if __name__ == "__main__":
     os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # Define color variables at the top level for global use
+    color_green = Fore.GREEN if COLOR_ENABLED else ''
+    color_cyan = Fore.CYAN if COLOR_ENABLED else ''
+    color_yellow = Fore.YELLOW if COLOR_ENABLED else ''
+    color_red = Fore.RED if COLOR_ENABLED else ''
+    color_white = Fore.WHITE if COLOR_ENABLED else ''
+    color_reset = Style.RESET_ALL if COLOR_ENABLED else ''
+    
     banner = f"""
-{Fore.GREEN if COLOR_ENABLED else ''}╔══════════════════════════════════════╗
-║         Android Suite                ║
-║         Author: Jai                  ║
-║        Version: {VERSION:<10}           ║
-╚══════════════════════════════════════╝{Style.RESET_ALL if COLOR_ENABLED else ''}
+{color_green}======================================
+Android Suite
+Author: Jai
+Version: {VERSION:<10}
+======================================{color_reset}
     """
     print(banner)
     help_text = """
 Help - Android Suite Menu Options:
 ----------------------------------
+NAVIGATION:
+  [1-24] Select a menu option to execute
+  [  b ] Back to main menu (or exit current submenu)
+  [  h ] Show this help message
+  [  0 ] Exit Android Suite completely
+
+MENU OPTIONS:
 """
     for idx, (option, desc) in enumerate(MENU_OPTIONS, 1):
         help_text += f"[ {idx:<2}] {option:<40} - {desc}\n"
-    help_text += "[  b ] Back to main menu\n"
+    help_text += "\nTIP: Most submenus support 'b' to go back to the previous menu level.\n"
 
     while True:
         # Print menu
         print("")
         for idx, (option, _) in enumerate(MENU_OPTIONS, 1):
             if COLOR_ENABLED:
-                print(f"{Fore.CYAN}[ {idx:>2}]{Style.RESET_ALL}  {Fore.WHITE}{option:<32}{Style.RESET_ALL}")
+                print(f"{color_cyan}[{idx:>2}]{color_reset}  {color_white}{option:<32}{color_reset}")
             else:
-                print(f"[ {idx:>2}]  {option:<32}")
+                print(f"[{idx:>2}]  {option:<32}")
         if COLOR_ENABLED:
-            print(f"{Fore.CYAN}[  b]{Style.RESET_ALL}  {Fore.WHITE}Back to main menu{Style.RESET_ALL}")
+            print(f"{color_cyan}[ b]{color_reset}  {color_white}Back to main menu{color_reset}")
+            print(f"{color_cyan}[ h]{color_reset}  {color_white}Help - Show detailed descriptions{color_reset}")
+            print(f"{color_cyan}[ 0]{color_reset}  {color_white}Exit Android Suite{color_reset}")
         else:
-            print(f"[  b]  Back to main menu")
+            print(f"[ b]  Back to main menu")
+            print(f"[ h]  Help - Show detailed descriptions")
+            print(f"[ 0]  Exit Android Suite")
         print("")
         if COLOR_ENABLED:
-            choice = input(f"{Fore.YELLOW}Select an option [1-24], 'b' to return, or 'h' for help: {Style.RESET_ALL}").strip().lower()
+            choice = input(f"{Fore.YELLOW}Select an option [1-28], 'b' to return, or 'h' for help: {Style.RESET_ALL}").strip().lower()
         else:
-            choice = input(f"Select an option [1-24], 'b' to return, or 'h' for help: ").strip().lower()
+            choice = input(f"Select an option [1-28], 'b' to return, or 'h' for help: ").strip().lower()
 
         if choice in ("h", "help"):
             if COLOR_ENABLED:
@@ -106,48 +130,32 @@ Help - Android Suite Menu Options:
         # Convert to int for option handling
         choice_num = int(choice)
         try:
-            color_green = Fore.GREEN if COLOR_ENABLED else ''
-            color_cyan = Fore.CYAN if COLOR_ENABLED else ''
-            color_yellow = Fore.YELLOW if COLOR_ENABLED else ''
-            color_red = Fore.RED if COLOR_ENABLED else ''
-            color_white = Fore.WHITE if COLOR_ENABLED else ''
-            color_reset = Style.RESET_ALL if COLOR_ENABLED else ''
             if choice_num == 1:
-                print(f"\n{color_yellow}Android Suite Installer Options:{color_reset}")
-                print(f"{color_cyan}1.{color_reset} Standard installation (Python packages + Android SDK)")
-                print(f"{color_cyan}2.{color_reset} Install Android Studio Command Line Tools") 
-                print(f"{color_cyan}3.{color_reset} Install Android Emulator with AVD")
-                print(f"{color_cyan}4.{color_reset} Install full Android Studio IDE")
-                print(f"{color_cyan}5.{color_reset} Full installation (everything)")
-                print(f"{color_cyan}6.{color_reset} Verify existing installation")
-                print(f"{color_cyan}7.{color_reset} Default installer")
-                print(f"{color_cyan}8.{color_reset} Recommended installation (best-practice setup)")
+                print(f"\n{color_yellow}Android Suite Installer:{color_reset}")
+                print(f"{color_cyan}The installer has been streamlined for better user experience.{color_reset}")
+                print(f"{color_cyan}1.{color_reset} Install all tools (recommended)")
+                print(f"{color_cyan}2.{color_reset} Install emulator only") 
+                print(f"{color_cyan}3.{color_reset} Verify existing installation")
+                print(f"{color_cyan}b.{color_reset} Back to main menu")
 
-                install_choice = input(f"\n{color_yellow}Select installation option [1-8]: {color_reset}").strip()
+                install_choice = input(f"\n{color_yellow}Select installation option [1-3] or 'b' to go back: {color_reset}").strip().lower()
+
+                if install_choice == 'b':
+                    continue
 
                 import subprocess
                 os.makedirs("tools", exist_ok=True)
 
                 print(f"{color_yellow}Starting installation. This may take several minutes...{color_reset}")
                 if install_choice == "1":
-                    subprocess.run([sys.executable, "installer.py", "--standard", "--tools-dir", "tools"], check=False)
+                    subprocess.run([sys.executable, "installer.py", "--all-tools"], check=False)
                 elif install_choice == "2":
-                    subprocess.run([sys.executable, "installer.py", "--android-studio", "--tools-dir", "tools"], check=False)
+                    subprocess.run([sys.executable, "installer.py", "--emulator"], check=False)
                 elif install_choice == "3":
-                    subprocess.run([sys.executable, "installer.py", "--android-emulator", "--tools-dir", "tools"], check=False)
-                elif install_choice == "4":
-                    subprocess.run([sys.executable, "installer.py", "--android-studio-full", "--tools-dir", "tools"], check=False)
-                elif install_choice == "5":
-                    subprocess.run([sys.executable, "installer.py", "--full", "--tools-dir", "tools"], check=False)
-                elif install_choice == "6":
-                    subprocess.run([sys.executable, "installer.py", "--verify-only", "--tools-dir", "tools"], check=False)
-                elif install_choice == "7":
-                    subprocess.run([sys.executable, "installer.py", "--tools-dir", "tools"], check=False)
-                elif install_choice == "8":
-                    subprocess.run([sys.executable, "installer.py", "--recommended", "--tools-dir", "tools"], check=False)
+                    subprocess.run([sys.executable, "installer.py", "--verify"], check=False)
                 else:
-                    print(f"{color_red}Invalid choice. Running default installer...{color_reset}")
-                    subprocess.run([sys.executable, "installer.py", "--tools-dir", "tools"], check=False)
+                    print(f"{color_red}Invalid choice. Returning to main menu...{color_reset}")
+                    continue
             elif choice_num == 2:
                 print(f"\n{color_yellow}Checking emulator root status...{color_reset}")
                 device_id = input("Enter device ID (optional, will auto-detect): ").strip() or None
@@ -307,21 +315,20 @@ Help - Android Suite Menu Options:
                 else:
                     print(f"{color_red}{message}{color_reset}")
             elif choice_num == 15:
-                # Dump APK with fridump
-                apk = input("Enter APK file path: ").strip()
+                # Dump app memory with fridump
+                print(f"{color_cyan}[i] Fridump will dump memory from a running app process.{color_reset}")
+                print(f"{color_cyan}[i] Make sure the target app is running on the device.{color_reset}")
                 device = input("Enter device ID (optional): ").strip() or None
                 name = input("Enter package name (required): ").strip()
-                if not apk or not os.path.exists(apk):
-                    print(f"{color_red}[!] APK file not found.{color_reset}")
-                    continue
                 if not name:
                     print(f"{color_yellow}[!] Package name is required for fridump.{color_reset}")
                     continue
-                pentester = AndroidPentester(apk_path=apk, app_name=name, device_id=device)
+                pentester = AndroidPentester(app_name=name, device_id=device)
                 pentester._setup_adb_connection()
                 pentester._setup_frida_server_optional()
                 output_dir = input("Enter output directory for fridump (leave blank for ./output/fridump): ").strip() or 'output/fridump'
                 os.makedirs(output_dir, exist_ok=True)
+                print(f"{color_cyan}[i] Running fridump on package: {name}{color_reset}")
                 pentester.run_fridump(output_dir=output_dir)
                 print(f"{color_green}Fridump completed. Output in {output_dir}{color_reset}")
             elif choice_num == 16:
@@ -354,19 +361,30 @@ Help - Android Suite Menu Options:
             elif choice_num == 17:
                 # Run APKLeaks on APK
                 apk = input("Enter APK file path to scan: ").strip()
-                output_dir = input("Enter output directory for apkleaks [leave blank for ./output/apkleaks]: ").strip() or 'output/apkleaks'
+                output_path = input("Enter output file for apkleaks [leave blank for ./output/apkleaks/report.txt]: ").strip() or 'output/apkleaks/report.txt'
+                # If user enters a directory, append report.txt
+                if output_path.endswith(os.sep) or (not os.path.splitext(output_path)[1]):
+                    output_path = os.path.join(output_path, 'report.txt')
+                output_dir = os.path.dirname(output_path)
                 if not apk or not os.path.exists(apk):
                     print(f"{color_red}[!] APK file not found.{color_reset}")
                 else:
                     os.makedirs(output_dir, exist_ok=True)
-                    pentester = AndroidPentester(apk_path=apk, app_name=None, device_id=None)
-                    success, stdout, stderr, message = pentester.run_apkleaks(apk, output_dir=output_dir)
-                    if success:
-                        print(f"{color_green}APKLeaks scan complete. Output in {output_dir}{color_reset}")
-                    else:
-                        print(f"{color_red}APKLeaks scan failed: {message}{color_reset}")
-                        if stderr:
-                            print(f"{color_red}{stderr}{color_reset}")
+                    import subprocess
+                    cmd = ["apkleaks", "-f", apk, "-o", output_path]
+                    try:
+                        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                        print(f"{color_green}APKLeaks scan complete. Output in {output_path}{color_reset}")
+                        if result.stdout:
+                            print(f"{color_cyan}--- APKLeaks STDOUT ---{color_reset}\n{result.stdout}")
+                        if result.stderr:
+                            print(f"{color_yellow}--- APKLeaks STDERR ---{color_reset}\n{result.stderr}")
+                    except subprocess.CalledProcessError as e:
+                        print(f"{color_red}APKLeaks scan failed: {e}{color_reset}")
+                        if e.stdout:
+                            print(f"{color_cyan}--- APKLeaks STDOUT ---{color_reset}\n{e.stdout}")
+                        if e.stderr:
+                            print(f"{color_yellow}--- APKLeaks STDERR ---{color_reset}\n{e.stderr}")
             elif choice_num == 18:
                 # Extract app data directory
                 package = input("Enter package name to extract data for: ").strip()
@@ -392,14 +410,16 @@ Help - Android Suite Menu Options:
                 print(f"{color_yellow}Running apk-components-inspector...{color_reset}")
                 pentester = AndroidPentester(apk_path=apk, app_name=None, device_id=None)
                 success, stdout, stderr, message = pentester.run_apk_components_inspector(apk)
+                # Always print both stdout and stderr, even if empty, with clear labels
+                print(f"{color_cyan}--- apk-components-inspector STDOUT ---{color_reset}")
+                print(stdout if stdout else f"{color_yellow}[No stdout output]{color_reset}")
+                print(f"{color_cyan}--- apk-components-inspector STDERR ---{color_reset}")
+                print(stderr if stderr else f"{color_yellow}[No stderr output]{color_reset}")
+                # Print message and success/failure
                 if success:
-                    if stdout:
-                        print(f"{color_green}{stdout}{color_reset}")
                     print(f"{color_green}{message}{color_reset}")
                 else:
                     print(f"{color_red}{message}{color_reset}")
-                    if stderr:
-                        print(f"{color_red}{stderr}{color_reset}")
 
             elif choice_num == 20:
                 # Run frida-script-gen
@@ -464,8 +484,12 @@ Help - Android Suite Menu Options:
                 print(f"{color_cyan}Target Selection:{color_reset}")
                 print(f"{color_cyan}1.{color_reset} Package name (e.g., com.example.app)")
                 print(f"{color_cyan}2.{color_reset} Process ID (PID)")
+                print(f"{color_cyan}b.{color_reset} Back to main menu")
                 
-                target_choice = input(f"\n{color_yellow}Select target type [1-2]: {color_reset}").strip()
+                target_choice = input(f"\n{color_yellow}Select target type [1-2] or 'b' to go back: {color_reset}").strip().lower()
+                
+                if target_choice == 'b':
+                    continue
                 
                 package_name = None
                 process_id = None
@@ -725,6 +749,7 @@ Help - Android Suite Menu Options:
                     print(f"{color_red}[!] Error initializing Objection tester: {str(e)}{color_reset}")
                     
 
+
             elif choice_num == 24:
                 # New option: Create/Launch AVD with Magisk+Xposed
                 print(f"\n{color_yellow}Launching AVD with Magisk and Xposed (root, writable system)...{color_reset}")
@@ -735,7 +760,61 @@ Help - Android Suite Menu Options:
                 except Exception as e:
                     print(f"{color_red}Error running avd_magisk_xposed: {e}{color_reset}")
                 input(f"{color_yellow}Press Enter to continue...{color_reset}")
+
             elif choice_num == 25:
+                # Sensitive Strings/Secrets Finder
+                print(f"\n{color_yellow}Sensitive Strings/Secrets Finder{color_reset}")
+                apk_path = input("Enter APK path (or leave blank to use last set path): ").strip() or None
+                pentester = AndroidPentester(apk_path=apk_path)
+                pentester._setup_adb_connection()
+                results = pentester.find_sensitive_strings()
+                if results:
+                    print(f"{color_green}Sensitive strings/secrets found:{color_reset}")
+                    for r in results:
+                        print(f"{color_cyan}{r}{color_reset}")
+                else:
+                    print(f"{color_yellow}No sensitive strings or secrets found.{color_reset}")
+                input(f"{color_yellow}Press Enter to continue...{color_reset}")
+
+            elif choice_num == 26:
+                # Automated Backup/Restore
+                print(f"\n{color_yellow}Automated Backup/Restore{color_reset}")
+                package = input("Enter package name to backup/restore: ").strip()
+                pentester = AndroidPentester(apk_path=None)
+                pentester._setup_adb_connection()
+                print(f"{color_cyan}1.{color_reset} Backup app data\n{color_cyan}2.{color_reset} Restore app data\n{color_cyan}b.{color_reset} Back to main menu")
+                br_choice = input("Select option [1-2] or 'b': ").strip().lower()
+                if br_choice == '1':
+                    backup_path = input("Enter backup output path (default: ./output/backup.ab): ").strip() or "./output/backup.ab"
+                    pentester.adb_backup_app(package, backup_path)
+                elif br_choice == '2':
+                    backup_path = input("Enter backup file path to restore: ").strip()
+                    pentester.adb_restore_app(package, backup_path)
+                elif br_choice == 'b':
+                    pass
+                else:
+                    print(f"{color_red}Invalid choice.{color_reset}")
+                input(f"{color_yellow}Press Enter to continue...{color_reset}")
+
+            elif choice_num == 27:
+                # App Repackaging Utility
+                print(f"\n{color_yellow}App Repackaging Utility{color_reset}")
+                apk_path = input("Enter APK path to repackage: ").strip()
+                output_path = input("Enter output path for repackaged APK (default: ./output/repackaged.apk): ").strip() or "./output/repackaged.apk"
+                pentester = AndroidPentester(apk_path=apk_path)
+                pentester.repackage_apk(output_path)
+                input(f"{color_yellow}Press Enter to continue...{color_reset}")
+
+            elif choice_num == 28:
+                # Automated Uninstall/Cleaner
+                print(f"\n{color_yellow}Automated Uninstall/Cleaner{color_reset}")
+                package = input("Enter package name to uninstall and clean: ").strip()
+                pentester = AndroidPentester(apk_path=None)
+                pentester._setup_adb_connection()
+                pentester.uninstall_app_and_clean(package)
+                input(f"{color_yellow}Press Enter to continue...{color_reset}")
+
+            elif choice_num == 29:
                 print(f"{color_green}Exiting.{color_reset}")
                 sys.exit(0)
 
