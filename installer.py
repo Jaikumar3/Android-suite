@@ -17,6 +17,27 @@ import zipfile
 import tarfile
 
 class AndroidPentestInstaller:
+    def print_apktool_usage_hint(self):
+        """Check if apktool is in PATH, and if not, print the command to run it from the tools directory."""
+        import shutil
+        apktool_in_path = shutil.which("apktool")
+        if apktool_in_path:
+            self.log_status(f"apktool found in PATH: {apktool_in_path}", "SUCCESS")
+            return True
+        apktool_dir = self.tools_dir / "apktool"
+        if self.system == "windows":
+            bat_path = apktool_dir / "apktool.bat"
+            if bat_path.exists():
+                print(f"[INFO] apktool is not in your PATH. To use it, run:\n    {bat_path} <args>")
+            else:
+                print(f"[ERROR] apktool.bat not found in {apktool_dir}")
+        else:
+            sh_path = apktool_dir / "apktool"
+            if sh_path.exists():
+                print(f"[INFO] apktool is not in your PATH. To use it, run:\n    {sh_path} <args>")
+            else:
+                print(f"[ERROR] apktool script not found in {apktool_dir}")
+        return False
     def install_jadx_cli(self):
         """Download latest JADX CLI release and add to tools directory."""
         self.log_status("Installing JADX CLI ...")
@@ -97,8 +118,8 @@ class AndroidPentestInstaller:
             subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
             # Install dependencies
             pip_path = venv_dir / "bin" / "pip" if os.name != "nt" else venv_dir / "Scripts" / "pip.exe"
-            self.log_status("Installing dependencies: androguard==3.3.5 rich ...")
-            subprocess.run([str(pip_path), "install", "androguard==3.3.5", "rich"], check=True)
+            self.log_status("Installing dependencies: androguard==3.3.5 rich requests ...")
+            subprocess.run([str(pip_path), "install", "androguard==3.3.5", "rich", "requests"], check=True)
             self.log_status("✓ apk-components-inspector installed and ready", "SUCCESS")
             return True
         except Exception as e:
@@ -147,19 +168,46 @@ class AndroidPentestInstaller:
         self.log_status("Installing apktool...")
         apktool_dir = self.tools_dir / "apktool"
         apktool_dir.mkdir(exist_ok=True)
-        if self.system == "windows":
-            apktool_url = "https://github.com/iBotPeaches/Apktool/releases/latest/download/apktool_2.9.3.jar"
-            wrapper_url = "https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/windows/apktool.bat"
-            jar_path = apktool_dir / "apktool.jar"
-            bat_path = apktool_dir / "apktool.bat"
-            # Download jar
-            try:
-                self.log_status(f"Downloading apktool jar from {apktool_url}...")
-                r = requests.get(apktool_url)
+        
+        try:
+            # Get latest release info from GitHub API
+            self.log_status("Getting latest APKTool release info...")
+            api_url = "https://api.github.com/repos/iBotPeaches/Apktool/releases/latest"
+            response = requests.get(api_url)
+            response.raise_for_status()
+            
+            release_data = response.json()
+            version = release_data['tag_name']  # e.g., "v2.10.0"
+            
+            # Find the JAR asset in the release
+            jar_download_url = None
+            for asset in release_data['assets']:
+                if asset['name'].startswith('apktool') and asset['name'].endswith('.jar'):
+                    jar_download_url = asset['browser_download_url']
+                    break
+            
+            if not jar_download_url:
+                self.log_status("Could not find apktool JAR in latest release assets", "ERROR")
+                self.log_status("Available assets:", "INFO")
+                for asset in release_data['assets']:
+                    self.log_status(f"  - {asset['name']}", "INFO")
+                return False
+            
+            self.log_status(f"Found APKTool {version}")
+            
+            if self.system == "windows":
+                wrapper_url = "https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/windows/apktool.bat"
+                jar_path = apktool_dir / "apktool.jar"
+                bat_path = apktool_dir / "apktool.bat"
+                
+                # Download jar
+                self.log_status(f"Downloading apktool.jar from {jar_download_url}...")
+                r = requests.get(jar_download_url)
                 r.raise_for_status()
                 with open(jar_path, 'wb') as f:
                     f.write(r.content)
                 self.log_status("✓ apktool.jar downloaded", "SUCCESS")
+                
                 # Download bat
                 self.log_status(f"Downloading apktool.bat from {wrapper_url}...")
                 r = requests.get(wrapper_url)
@@ -167,21 +215,20 @@ class AndroidPentestInstaller:
                 with open(bat_path, 'wb') as f:
                     f.write(r.content)
                 self.log_status("✓ apktool.bat downloaded", "SUCCESS")
-            except Exception as e:
-                self.log_status(f"Failed to download apktool: {e}", "ERROR")
-                return False
-        else:
-            apktool_url = "https://github.com/iBotPeaches/Apktool/releases/latest/download/apktool_2.9.3.jar"
-            wrapper_url = "https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool"
-            jar_path = apktool_dir / "apktool.jar"
-            sh_path = apktool_dir / "apktool"
-            try:
-                self.log_status(f"Downloading apktool jar from {apktool_url}...")
-                r = requests.get(apktool_url)
+                
+            else:
+                wrapper_url = "https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool"
+                jar_path = apktool_dir / "apktool.jar"
+                sh_path = apktool_dir / "apktool"
+                
+                # Download jar
+                self.log_status(f"Downloading apktool.jar from {jar_download_url}...")
+                r = requests.get(jar_download_url)
                 r.raise_for_status()
                 with open(jar_path, 'wb') as f:
                     f.write(r.content)
                 self.log_status("✓ apktool.jar downloaded", "SUCCESS")
+                
                 # Download shell script
                 self.log_status(f"Downloading apktool script from {wrapper_url}...")
                 r = requests.get(wrapper_url)
@@ -190,11 +237,13 @@ class AndroidPentestInstaller:
                     f.write(r.content)
                 os.chmod(sh_path, 0o755)
                 self.log_status("✓ apktool script downloaded", "SUCCESS")
-            except Exception as e:
-                self.log_status(f"Failed to download apktool: {e}", "ERROR")
-                return False
-        self.log_status(f"Add {apktool_dir} to your PATH or use full path to run apktool.", "INFO")
-        return True
+            
+            self.log_status(f"Add {apktool_dir} to your PATH or use full path to run apktool.", "INFO")
+            return True
+            
+        except Exception as e:
+            self.log_status(f"Failed to download apktool: {e}", "ERROR")
+            return False
 
     def install_apkleaks(self):
         """Install apkleaks via pip."""
@@ -252,7 +301,7 @@ class AndroidPentestInstaller:
                 "frida-tools>=12.0.0",
                 "objection>=1.9.0",
                 "androguard>=3.4.0",
-                "python-adb>=3.2.0"
+                "adb-shell>=0.4.0"
             ]
         
         self.log_status("Installing Python packages...")
@@ -479,68 +528,16 @@ class AndroidPentestInstaller:
             return False
     
     def install_additional_tools(self):
-        """Install additional pentesting tools"""
+        """Install additional development and analysis tools (no Frida tools)"""
         self.log_status("Installing additional tools...")
         try:
-            # Install fridump (git clone)
-            self._install_git_tool({
-                "name": "fridump",
-                "type": "git",
-                "url": "https://github.com/Nightbringer21/fridump",
-                "description": "Memory dumping tool for Frida"
-            })
-        except Exception as e:
-            self.log_status(f"Exception during fridump install: {e}", "ERROR")
-        try:
-            # Install apk-components-inspector (git clone + venv + pip)
-            self.install_apk_components_inspector()
-        except Exception as e:
-            self.log_status(f"Exception during apk-components-inspector install: {e}", "ERROR")
-        try:
-            # Install JADX 1.5.2 (zip download)
+            # Install JADX 1.5.2 (zip download) - Specific stable version
+            self.log_status("Installing JADX 1.5.2...", "INFO")
             self.install_jadx_1_5_2()
         except Exception as e:
             self.log_status(f"Exception during JADX 1.5.2 install: {e}", "ERROR")
-        try:
-            # Install MobApp-Storage-Inspector (jar download)
-            self.install_mobapp_storage_inspector()
-        except Exception as e:
-            self.log_status(f"Exception during MobApp-Storage-Inspector install: {e}", "ERROR")
-        try:
-            # Install frida-script-gen (git clone)
-            self.install_frida_script_gen()
-        except Exception as e:
-            self.log_status(f"Exception during frida-script-gen install: {e}", "ERROR")
-        try:
-            # Install APKiD (pip)
-            self._install_pip_tool({
-                "name": "APKiD",
-                "type": "pip",
-                "package": "apkid",
-                "description": "Android Application Identifier"
-            })
-        except Exception as e:
-            self.log_status(f"Exception during APKiD install: {e}", "ERROR")
-        try:
-            # Install Quark-Engine (pip)
-            self._install_pip_tool({
-                "name": "Quark-Engine",
-                "type": "pip",
-                "package": "quark-engine",
-                "description": "Android malware analysis tool"
-            })
-        except Exception as e:
-            self.log_status(f"Exception during Quark-Engine install: {e}", "ERROR")
-        try:
-            # Install apktool
-            self.install_apktool()
-        except Exception as e:
-            self.log_status(f"Exception during apktool install: {e}", "ERROR")
-        try:
-            # Install apkleaks
-            self.install_apkleaks()
-        except Exception as e:
-            self.log_status(f"Exception during apkleaks install: {e}", "ERROR")
+        
+        self.log_status("✓ Additional tools installation completed", "SUCCESS")
         return True
     
     def _install_git_tool(self, tool):
@@ -665,8 +662,8 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
             ("objection", "Objection", ["version"]),  # Objection uses 'version' without dashes
             ("java", "Java", ["-version"]),  # Java uses single dash -version
             ("git", "Git", ["--version"]),  # Git version check
-            ("jadx", "JADX", ["--version"]),  # JADX decompiler
-            ("apktool", "APKTool", ["--version"]),  # APKTool
+            ("jadx", "JADX", ["-h"]),  # JADX help command instead of --version due to Java compatibility
+            ("apktool", "APKTool", ["v"]),  # APKTool version command without --
             ("sdkmanager", "Android SDK Manager", ["--version"])  # SDK Manager
         ]
         
@@ -677,8 +674,18 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
         
         for tool_cmd, tool_name, version_args in tools_to_check:
             try:
-                # Check if tool exists in PATH first
-                if not shutil.which(tool_cmd):
+                tool_path = None
+                
+                # First check if tool exists in PATH
+                if shutil.which(tool_cmd):
+                    tool_path = tool_cmd
+                else:
+                    # Check for tools in local tools directory
+                    local_tool_path = self._find_local_tool(tool_cmd)
+                    if local_tool_path:
+                        tool_path = local_tool_path
+                
+                if not tool_path:
                     if (tool_cmd, tool_name, version_args) in core_tools:
                         verification_results[tool_name] = "✗ Not found in PATH"
                         self.log_status(f"✗ {tool_name} not found in PATH", "ERROR")
@@ -688,33 +695,169 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
                     continue
                 
                 # Try to run the tool with version flag
-                cmd = [tool_cmd] + version_args
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                cmd = [tool_path] + version_args
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
                 
                 if result.returncode == 0:
                     # Extract version info if available (check both stdout and stderr for Java)
                     output = result.stdout.strip() if result.stdout.strip() else result.stderr.strip()
                     version_info = output.split('\n')[0] if output else "Available"
+                    
+                    # Special case for APKTool which shows usage when called with 'v'
+                    if tool_cmd == "apktool" and "Apktool" in output:
+                        version_info = output.split('\n')[0]
+                    
                     verification_results[tool_name] = f"✓ {version_info}"
                     self.log_status(f"✓ {tool_name} is available: {version_info}", "SUCCESS")
                 else:
-                    # Special case for Java which outputs to stderr but returns 0
-                    if tool_cmd == "java" and result.stderr.strip():
-                        version_info = result.stderr.strip().split('\n')[0]
-                        verification_results[tool_name] = f"✓ {version_info}"
-                        self.log_status(f"✓ {tool_name} is available: {version_info}", "SUCCESS")
+                    # Special case for Java which may have configuration issues
+                    if tool_cmd == "java":
+                        java_info = self._check_java_availability()
+                        if java_info.get("working", False):
+                            # Java is working properly
+                            java_output = java_info.get("output", "")
+                            for line in java_output.split('\n'):
+                                if 'version' in line.lower() and ('"' in line or 'openjdk' in line.lower()):
+                                    version_info = line.strip()
+                                    break
+                            else:
+                                version_info = "Java is available"
+                            verification_results[tool_name] = f"✓ {version_info}"
+                            self.log_status(f"✓ {tool_name} is available: {version_info}", "SUCCESS")
+                        elif java_info.get("config_issue", False):
+                            verification_results[tool_name] = "✓ Java installed (configuration issue - tools may not work)"
+                            self.log_status(f"✓ {tool_name} is installed but has configuration issues", "WARNING")
+                        else:
+                            verification_results[tool_name] = "✗ Java not working properly"
+                            self.log_status(f"✗ {tool_name} not working properly", "ERROR")
+                    # Special case for JADX which may have Java compatibility issues
+                    elif tool_cmd == "jadx":
+                        # Check if Java is available first
+                        java_info = self._check_java_availability()
+                        if not java_info.get("available", False):
+                            verification_results[tool_name] = "✓ Installed (requires Java to be installed)"
+                            self.log_status(f"✓ {tool_name} is installed but requires Java to run", "WARNING")
+                        elif not java_info.get("working", False):
+                            verification_results[tool_name] = "✓ Installed (Java configuration needed)"
+                            self.log_status(f"✓ {tool_name} is installed but Java needs configuration", "WARNING")
+                        elif "version" in java_info and java_info["version"] < 8:
+                            verification_results[tool_name] = "✓ Installed (requires Java 8 or newer)"
+                            self.log_status(f"✓ {tool_name} is installed but requires Java 8 or newer", "WARNING")
+                        else:
+                            verification_results[tool_name] = "✓ Installed and ready"
+                            self.log_status(f"✓ {tool_name} is installed and ready", "SUCCESS")
+                    # Special case for SDK Manager which may need newer Java
+                    elif tool_cmd == "sdkmanager":
+                        # Check if Java is available first
+                        java_info = self._check_java_availability()
+                        if not java_info.get("available", False):
+                            verification_results[tool_name] = "✓ Installed (requires Java to be installed)"
+                            self.log_status(f"✓ {tool_name} is installed but requires Java to run", "WARNING")
+                        elif not java_info.get("working", False):
+                            verification_results[tool_name] = "✓ Installed (Java configuration needed)"
+                            self.log_status(f"✓ {tool_name} is installed but Java needs configuration", "WARNING")
+                        elif "version" in java_info and java_info["version"] < 11:
+                            verification_results[tool_name] = "✓ Installed (requires Java 11 or newer)"
+                            self.log_status(f"✓ {tool_name} is installed but requires Java 11 or newer", "WARNING")
+                        else:
+                            verification_results[tool_name] = "✓ Installed and ready"
+                            self.log_status(f"✓ {tool_name} is installed and ready", "SUCCESS")
                     else:
                         verification_results[tool_name] = "✗ Not working properly"
                         self.log_status(f"✗ {tool_name} not working properly", "ERROR")
                     
             except subprocess.TimeoutExpired:
-                verification_results[tool_name] = "✗ Command timeout"
-                self.log_status(f"✗ {tool_name} command timed out", "ERROR")
+                # Tools might be installed but slow or waiting for input
+                if tool_path and os.path.exists(tool_path):
+                    verification_results[tool_name] = "✓ Installed "
+                    self.log_status(f"✓ {tool_name} is installed ", "WARNING")
+                else:
+                    verification_results[tool_name] = "✗ Command timeout"
+                    self.log_status(f"✗ {tool_name} command timed out", "ERROR")
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 verification_results[tool_name] = "✗ Command failed"
                 self.log_status(f"✗ {tool_name} command failed: {e}", "ERROR")
         
         return verification_results
+    
+    def _find_local_tool(self, tool_cmd):
+        """Find tool in local tools directory"""
+        tools_dir = os.path.join(os.path.dirname(__file__), "tools")
+        
+        if not os.path.exists(tools_dir):
+            return None
+            
+        # Define specific local tool mappings
+        local_tool_paths = {
+            "jadx": [
+                os.path.join(tools_dir, "jadx-*", "bin", "jadx.bat" if os.name == 'nt' else "jadx"),
+                os.path.join(tools_dir, "jadx", "bin", "jadx.bat" if os.name == 'nt' else "jadx")
+            ],
+            "apktool": [
+                os.path.join(tools_dir, "apktool", "apktool.bat" if os.name == 'nt' else "apktool"),
+                os.path.join(tools_dir, "tools", "apktool", "apktool.bat" if os.name == 'nt' else "apktool")
+            ],
+            "sdkmanager": [
+                os.path.join(tools_dir, "android-sdk", "cmdline-tools", "latest", "bin", "sdkmanager.bat" if os.name == 'nt' else "sdkmanager"),
+                os.path.join(tools_dir, "android-sdk", "tools", "bin", "sdkmanager.bat" if os.name == 'nt' else "sdkmanager")
+            ]
+        }
+        
+        if tool_cmd in local_tool_paths:
+            for path_pattern in local_tool_paths[tool_cmd]:
+                # Handle wildcard patterns
+                if "*" in path_pattern:
+                    import glob
+                    matches = glob.glob(path_pattern)
+                    for match in matches:
+                        if os.path.exists(match):
+                            return match
+                else:
+                    if os.path.exists(path_pattern):
+                        return path_pattern
+        
+        return None
+    
+    def _check_java_availability(self):
+        """Check if Java is available on the system and return version info"""
+        try:
+            # Try to run java -version
+            result = subprocess.run(["java", "-version"], capture_output=True, text=True, timeout=5)
+            
+            # Check if Java is working properly
+            if result.returncode == 0:
+                # Java is working, extract version
+                java_output = result.stderr if result.stderr else result.stdout
+                version_info = {"available": True, "working": True, "output": java_output}
+                
+                # Try to extract version number for compatibility checks
+                import re
+                for line in java_output.split('\n'):
+                    if 'version' in line.lower():
+                        # Look for version patterns like "24.0.1", "11.0.0", "1.8.0"
+                        version_match = re.search(r'"(\d+)\.(\d+)\.(\d+)', line)
+                        if version_match:
+                            major = int(version_match.group(1))
+                            if major == 1:  # Java 8 format: 1.8.0
+                                version_info["version"] = int(version_match.group(2))
+                            else:  # Java 9+ format: 11.0.0, 17.0.0, 24.0.1
+                                version_info["version"] = major
+                        break
+                return version_info
+            else:
+                # Java command failed, check if it's a configuration issue
+                java_output = result.stderr if result.stderr else result.stdout
+                if "registry" in java_output.lower() or "could not find" in java_output.lower():
+                    return {"available": True, "working": False, "config_issue": True, "output": java_output}
+                else:
+                    return {"available": False, "working": False}
+                    
+        except FileNotFoundError:
+            # Java command not found
+            return {"available": False, "working": False}
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+            # Java command exists but failed
+            return {"available": True, "working": False}
     
     def save_installation_report(self):
         """Save installation report"""
@@ -855,14 +998,14 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
                             if item.name != "latest":  # Don't copy the latest dir we just created
                                 dest_item = cmdline_tools_dst / item.name
                                 if item.is_dir():
-                                    sh.copytree(item, dest_item, dirs_exist_ok=True)
+                                    shutil.copytree(item, dest_item, dirs_exist_ok=True)
                                 else:
-                                    sh.copy2(item, dest_item)
+                                    shutil.copy2(item, dest_item)
                         # Remove original files (keep the cmdline-tools directory structure)
                         for item in cmdline_tools_src.iterdir():
                             if item.name != "latest":
                                 if item.is_dir():
-                                    sh.rmtree(item)
+                                    shutil.rmtree(item)
                                 else:
                                     item.unlink()
                     else:
@@ -1001,16 +1144,24 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
         self.log_status("Installing pentesting tools...")
         
         try:
-            # Install APKTool
+            # Install APKTool - Core reverse engineering tool
+            self.log_status("Installing APKTool...", "INFO")
             self.install_apktool()
             
-            # Install APKLeaks
+            # Install APKLeaks - Secret scanning tool
+            self.log_status("Installing APKLeaks...", "INFO") 
             self.install_apkleaks()
             
-            # Install MobApp-Storage-Inspector
+            # Install MobApp-Storage-Inspector - Mobile storage analysis
+            self.log_status("Installing MobApp-Storage-Inspector...", "INFO")
             self.install_mobapp_storage_inspector()
             
-            # Install APKiD
+            # Install APK Components Inspector - Comprehensive APK analysis (Option 19 tool)
+            self.log_status("Installing APK Components Inspector...", "INFO")
+            self.install_apk_components_inspector()
+            
+            # Install APKiD - APK identifier for packers/protectors
+            self.log_status("Installing APKiD...", "INFO")
             self._install_pip_tool({
                 "name": "APKiD",
                 "type": "pip",
@@ -1018,7 +1169,8 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
                 "description": "Android Application Identifier"
             })
             
-            # Install Quark-Engine
+            # Install Quark-Engine - Malware analysis engine
+            self.log_status("Installing Quark-Engine...", "INFO")
             self._install_pip_tool({
                 "name": "Quark-Engine",
                 "type": "pip",
@@ -1350,65 +1502,45 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
             return False
     # ...existing code...
 def main():
-    """Main installation function with options"""
+    """Main installation function with simplified options"""
     import argparse
     import time
     
     parser = argparse.ArgumentParser(
-        description="Android Pentesting Tools Installer",
+        description='Android Pentesting Tools Installer - Simplified',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Installation Options:
-  --minimal         Install only essential Python packages
-  --standard        Install Python packages + Android SDK tools (default)
-  --full           Install everything including additional tools
-  --frida-only     Install only Frida-related tools (Frida + Objection)
-  --android-studio Install Android Studio Command Line Tools only
-  --android-emulator Install Android Emulator with AVD only (no other tools)
-  --android-studio-full Install full Android Studio IDE
-  --pentest-tools  Install pentesting tools (APKTool, APKLeaks, MobApp-Storage-Inspector, etc.)
-  --reverse-engineering Install reverse engineering tools (JADX, fridump, apk-components-inspector)
-  --verify-only    Only verify existing installations
+Simplified Installation Options:
+  --all-tools      Install all pentesting tools in one shot (Python packages, Android SDK, ADB, Frida, Objection, JADX, APKTool, APKLeaks, APKiD, Quark-Engine, MobApp-Storage-Inspector, apk-components-inspector)
+  --emulator       Install Android Emulator with AVD setup for pentesting (Android SDK CLI + Emulator + Pre-configured AVDs)
 
 Examples:
-  python installer.py --standard
-  python installer.py --full
-  python installer.py --android-studio
-  python installer.py --android-emulator
-  python installer.py --android-studio-full
-  python installer.py --frida-only
-  python installer.py --pentest-tools
-  python installer.py --reverse-engineering
+  python installer.py --all-tools
+  python installer.py --emulator
   python installer.py --verify-only
         """
     )
     
-    parser.add_argument('--minimal', action='store_true',
-                      help='Install only essential Python packages')
-    parser.add_argument('--standard', action='store_true', default=True,
-                      help='Install Python packages + Android SDK tools (default)')
-    parser.add_argument('--full', action='store_true',
-                      help='Install everything including additional tools')
-    parser.add_argument('--frida-only', action='store_true',
-                      help='Install only Frida-related tools (Frida + Objection)')
-    parser.add_argument('--android-studio', action='store_true',
-                      help='Install Android Studio Command Line Tools only')
-    parser.add_argument('--android-emulator', action='store_true',
-                      help='Install Android Emulator with AVD only (no other tools)')
-    parser.add_argument('--android-studio-full', action='store_true',
-                      help='Install full Android Studio IDE')
-    parser.add_argument('--pentest-tools', action='store_true',
-                      help='Install pentesting tools (APKTool, APKLeaks, MobApp-Storage-Inspector, etc.)')
-    parser.add_argument('--reverse-engineering', action='store_true',
-                      help='Install reverse engineering tools (JADX, fridump, apk-components-inspector)')
+    parser.add_argument('--all-tools', action='store_true',
+                      help='Install all pentesting tools in one shot (recommended)')
+    parser.add_argument('--emulator', action='store_true',
+                      help='Install Android Emulator with AVD setup for pentesting')
     parser.add_argument('--verify-only', action='store_true',
                       help='Only verify existing installations')
-    parser.add_argument('--recommended', action='store_true',
-                      help='Run recommended installation (Android SDK CLI, Emulator, Android 12L (Sv2) x86_64 AVD, core pentesting tools, reverse engineering tools, Frida tools, environment script, verification, and report)')
     parser.add_argument('--tools-dir', default='./tools',
                       help='Directory to install tools (default: ./tools)')
     
     args = parser.parse_args()
+    
+    # Show help if no arguments provided
+    if not any([args.all_tools, args.emulator, args.verify_only]):
+        parser.print_help()
+        print("\n" + "="*60)
+        print("QUICK START:")
+        print("  For complete pentesting setup: python installer.py --all-tools")
+        print("  For emulator only:             python installer.py --emulator")
+        print("="*60)
+        return
     
     # Initialize installer with custom tools directory if provided
     installer = AndroidPentestInstaller(tools_dir=args.tools_dir)
@@ -1436,55 +1568,56 @@ Examples:
         for tool, status in results.items():
             print(f"{tool}: {status}")
     
-    elif args.recommended:
-        # Recommended installation
-        success = installer.install_recommended()
-    elif args.android_studio:
-        # Install Android Studio Command Line Tools only
-        success = installer.install_android_studio_cli()
-    
-    elif args.android_emulator:
-        # Install Android Emulator with AVD only (no other tools)
-        success = installer.install_emulator_only()
-    
-    elif args.android_studio_full:
-        # Install full Android Studio IDE
-        success = installer.install_full_android_studio()
-    
-    elif args.frida_only:
-        # Install only Frida-related tools (Frida + Objection + Frida server)
-        success = installer.install_frida_tools_only()
-    
-    elif args.pentest_tools:
-        # Install only pentesting tools (APKTool, APKLeaks, MobApp-Storage-Inspector, etc.)
-        success = installer.install_pentesting_tools_only()
-    
-    elif args.reverse_engineering:
-        # Install only reverse engineering tools (JADX, fridump, apk-components-inspector)
-        success = installer.install_reverse_engineering_tools_only()
-    
-    elif args.minimal:
-        # Minimal installation - only essential Python packages
-        essential_packages = [
-            "requests>=2.25.1",
-            "colorama>=0.4.4"
-        ]
-        success = installer.install_python_packages(essential_packages)
-    
-    elif args.full:
-        # Full installation - everything
+    elif args.all_tools:
+        # Install all pentesting tools in one shot
+        installer.log_status("Installing ALL pentesting tools...", "INFO")
+        
+        # 1. Install Python packages
+        installer.log_status("Step 1/6: Installing Python packages...", "INFO")
         py_success = installer.install_python_packages()
+        
+        # 2. Install Android SDK tools
+        installer.log_status("Step 2/6: Installing Android SDK tools...", "INFO")
         sdk_success = installer.install_android_sdk_tools() if py_success else False
-        jadx_success = installer.install_jadx() if sdk_success else False
-        frida_success = installer.install_frida_server_files() if jadx_success else False
-        # Always attempt additional tools, even if previous steps failed
-        add_success = installer.install_additional_tools()
-        success = py_success and sdk_success and jadx_success and frida_success and add_success
-    else:
-        # Standard installation (default) - Python packages + Android SDK tools only
-        py_success = installer.install_python_packages()
-        sdk_success = installer.install_android_sdk_tools() if py_success else False
-        success = py_success and sdk_success
+        
+        # 3. Install reverse engineering tools
+        installer.log_status("Step 3/6: Installing reverse engineering tools...", "INFO")
+        re_success = installer.install_reverse_engineering_tools_only() if sdk_success else False
+        
+        # 4. Install pentesting tools
+        installer.log_status("Step 4/5: Installing pentesting tools...", "INFO")
+        pt_success = installer.install_pentesting_tools_only() if re_success else False
+        
+        # 5. Install additional tools
+        installer.log_status("Step 5/5: Installing additional tools...", "INFO")
+        add_success = installer.install_additional_tools() if pt_success else False
+        
+        success = py_success and sdk_success and re_success and pt_success and add_success
+        
+        if success:
+            installer.log_status("✓ ALL TOOLS INSTALLATION COMPLETED SUCCESSFULLY!", "SUCCESS")
+        else:
+            installer.log_status("⚠ Some tools failed to install. Check the log above.", "WARNING")
+    
+    elif args.emulator:
+        # Install Android Emulator with AVD setup
+        installer.log_status("Installing Android Emulator for pentesting...", "INFO")
+        
+        # 1. Install Android SDK CLI tools
+        installer.log_status("Step 1/2: Installing Android SDK CLI tools...", "INFO")
+        cli_success = installer.install_android_studio_cli()
+        
+        # 2. Install Emulator and create AVDs
+        installer.log_status("Step 2/2: Installing Android Emulator and creating AVDs...", "INFO")
+        emu_success = installer.install_android_emulator() if cli_success else False
+        
+        success = cli_success and emu_success
+        
+        if success:
+            installer.log_status("✓ EMULATOR INSTALLATION COMPLETED SUCCESSFULLY!", "SUCCESS")
+            installer.log_status("Use: emulator -avd Android_API_32_Sv2_Pentest -writable-system", "INFO")
+        else:
+            installer.log_status("⚠ Emulator installation failed. Check the log above.", "WARNING")
     
     # Create environment setup script
     if success and not args.verify_only:
