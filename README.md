@@ -1,7 +1,7 @@
 # Android Pentesting Suite
 
 **Author:** Jai  
-**Version:** 2.0.0
+**Version:** 2.5.0
 
 ## Overview
 
@@ -101,3 +101,4 @@ Unauthorized copying, reproduction, or redistribution of this tool is strictly f
 
 - Happy Hacking >>>
 **For more details, see the in-app help menu or comments in `main.py` and `installer.py`.**
+
