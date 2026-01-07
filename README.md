@@ -110,22 +110,20 @@ When you select "Install/verify tools" from the menu, you’ll see these options
 
 The recommended installation sets up the most common tools and a preconfigured Android 12L (Sv2) x86_64 AVD with Google APIs.
 
-## Tool List
+## External Dependencies
 
-- **Android SDK, Emulator, AVD**
-- **Frida, Objection, APKTool, JADX, APKLeaks**
-- **MobApp-Storage-Inspector, Quark-Engine, APKiD**
-- **Burp Suite CA certificate automation**
-- **Magisk + Xposed for rooted/writable emulators**
+These tools are installed automatically via **Option 1** (Install/verify tools):
 
-## Usage Examples
+| Tool | Purpose |
+|------|---------|
+| Android SDK | ADB, aapt, emulator |
+| APKTool | Decompile APK resources |
+| JADX | Decompile to Java source |
+| Frida Server | On-device instrumentation |
+| APKLeaks | Secrets scanning |
 
-- **Check emulator root status**
-- **Install/uninstall APKs via ADB**
-- **Extract app data directory**
-- **Run Frida/Objection tests**
-- **Decompile APKs and scan for secrets**
-- **Install Burp Suite CA certificate for HTTPS interception**
+**Manual requirement:**
+- **Java 17+** - Required for JADX and MobApp-Storage-Inspector ([Download](https://adoptium.net/))
 
 ## Requirements
 
