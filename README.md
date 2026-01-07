@@ -76,13 +76,24 @@ p.run_deeplink_security_test(apk_path=r'path\to\app.apk')
 
 ## Quick Start
 
-1. **Install Python 3.8+** and ensure `pip` is available.
-2. **Clone this repository** and open the folder in VS Code or your terminal.
-3. **Run the main menu:**
-   ```powershell
-   python main.py
-   ```
-4. **Select an option** from the menu to install tools, manage emulators, or run pentesting tasks.
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/Jaikumar3/Android-suite.git
+cd Android-suite
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run the tool
+python main.py
+```
+
+### First Run
+1. Select **Option 1** to install/verify all required tools
+2. Connect your Android device or start an emulator
+3. Select any option (2-29) to start pentesting
 
 ## Installer Options
 
