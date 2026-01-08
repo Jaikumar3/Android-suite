@@ -966,9 +966,6 @@ MENU OPTIONS:
                                 print(f"[*] Response: {test_result.get('response', 'N/A')[:200]}")
                                 if test_result.get('indicators'):
                                     print(f"[*] Indicators: {', '.join(test_result['indicators'])}")
-                            print(f"[*] Response: {test_result.get('response', 'N/A')[:200]}")
-                            if test_result.get('indicators'):
-                                print(f"[*] Indicators: {', '.join(test_result['indicators'])}")
                 
                 input(f"\n{color_yellow}Press Enter to continue...{color_reset}")
 
