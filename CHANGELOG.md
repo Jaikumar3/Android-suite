@@ -5,6 +5,26 @@ All notable changes to Android Pentesting Suite will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-01-08
+
+### Added
+- Ctrl+C (KeyboardInterrupt) graceful handling - no more crashes
+- `signal_handler()` for clean exit on interrupt
+- `safe_input()` helper with empty check and interrupt handling
+- `check_device_connection()` helper for device validation
+- `require_package_name()` helper with validation
+- `require_file_path()` helper with validation
+
+### Changed
+- Main loop now wrapped in try/except for stability
+- Updated handlers to use new stability helpers
+- Better error messages for missing device/invalid input
+
+### Fixed
+- Empty input handling in menu selection
+- Keyboard interrupt now handled gracefully throughout
+- Device connection errors no longer crash the app
+
 ## [2.5.1] - 2026-01-08
 
 ### Changed

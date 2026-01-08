@@ -14,6 +14,7 @@ import sys
 import os
 import argparse
 import subprocess
+import signal
 
 # Local imports
 from android_pentest import AndroidPentester
@@ -46,7 +47,7 @@ except ImportError:
 # CONSTANTS
 # =============================================================================
 
-VERSION = "2.5.1"
+VERSION = "2.5.2"
 AUTHOR = "Jai"
 
 MENU_OPTIONS = [
@@ -251,7 +252,71 @@ def print_info(message):
 
 def pause(message="Press Enter to continue..."):
     """Pause and wait for user input"""
-    input(f"{colors.YELLOW}{message}{colors.RESET}")
+    try:
+        input(f"{colors.YELLOW}{message}{colors.RESET}")
+    except (EOFError, KeyboardInterrupt):
+        print()
+
+
+# =============================================================================
+# STABILITY HELPERS
+# =============================================================================
+
+def signal_handler(sig, frame):
+    """Handle Ctrl+C gracefully"""
+    print(f"\n{colors.YELLOW}[!] Interrupted. Exiting gracefully...{colors.RESET}")
+    sys.exit(0)
+
+
+def safe_input(prompt, allow_empty=False, default=None):
+    """Get user input with empty check and interrupt handling"""
+    try:
+        value = input(f"{colors.YELLOW}{prompt}{colors.RESET}").strip()
+        if not value:
+            return default if allow_empty else None
+        return value
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return default
+
+
+def check_device_connection(pentester):
+    """Check if device is connected, return True if connected"""
+    try:
+        if not pentester._setup_adb_connection():
+            print_error("[!] No device connected. Please connect a device or start an emulator.")
+            return False
+        return True
+    except Exception as e:
+        print_error(f"[!] Failed to connect to device: {e}")
+        return False
+
+
+def require_package_name(prompt="Enter package name: "):
+    """Get and validate package name from user"""
+    package = safe_input(prompt, allow_empty=False)
+    if not package:
+        print_error("[!] Package name is required.")
+        return None
+    valid, err = config.validate_package_name(package)
+    if not valid:
+        print_error(f"[!] {err}")
+        return None
+    return package
+
+
+def require_file_path(prompt="Enter file path: ", must_exist=True, file_type=None):
+    """Get and validate file path from user"""
+    path = safe_input(prompt, allow_empty=False)
+    if not path:
+        print_error("[!] File path is required.")
+        return None
+    valid, err = config.validate_file_path(path, must_exist=must_exist, file_type=file_type)
+    if not valid:
+        print_error(f"[!] {err}")
+        return None
+    return path
+
 
 # =============================================================================
 # MENU HANDLERS
@@ -317,16 +382,16 @@ def handle_option_3():
 
 def handle_option_4():
     """Handle: Get PID for package name"""
-    package = get_input("Enter package name (e.g. com.example.app): ")
-    valid, err = config.validate_package_name(package)
-    if not valid:
-        print_error(f"[!] {err}")
+    package = require_package_name("Enter package name (e.g. com.example.app): ")
+    if not package:
         return
     
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     matches = pentester.get_pid_for_package(package)
     
     if matches:
@@ -338,16 +403,16 @@ def handle_option_4():
 
 def handle_option_5():
     """Handle: Install APK via ADB"""
-    apk_path = get_input("Enter APK file path to install: ")
-    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-    if not valid:
-        print_error(f"[!] {err}")
+    apk_path = require_file_path("Enter APK file path to install: ", must_exist=True, file_type='.apk')
+    if not apk_path:
         return
     
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=apk_path, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     result = pentester.adb_install_apk(apk_path, device_id=device_id)
     
     if result:
@@ -358,16 +423,16 @@ def handle_option_5():
 
 def handle_option_6():
     """Handle: Uninstall APK via ADB"""
-    package = get_input("Enter package name to uninstall: ")
-    valid, err = config.validate_package_name(package)
-    if not valid:
-        print_error(f"[!] {err}")
+    package = require_package_name("Enter package name to uninstall: ")
+    if not package:
         return
     
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     result = pentester.adb_uninstall_apk(package, device_id=device_id)
     
     if result:
@@ -939,6 +1004,9 @@ def handle_option_29():
 
 def main():
     """Main application entry point"""
+    # Setup Ctrl+C handler
+    signal.signal(signal.SIGINT, signal_handler)
+    
     clear_screen()
     
     # Initialize tab completion
@@ -984,36 +1052,45 @@ def main():
     }
     
     while True:
-        print_menu()
-        choice = get_input("Select an option [1-30], 'b' to return, or 'h' for help: ").lower()
-        
-        # Handle special commands
-        if choice in ("h", "help"):
-            print_success(help_text)
-            pause("Press Enter to return to the menu...")
-            continue
-        
-        if choice == "b":
-            continue
-        
-        if choice == '0':
-            print("Exiting.")
-            sys.exit(0)
-        
-        # Validate numeric choice
-        if not (choice.isdigit() and 1 <= int(choice) <= len(MENU_OPTIONS)):
-            print_error(f"Invalid option. Please select a valid option (1-{len(MENU_OPTIONS)}), 'b', or 'h'.")
-            pause()
-            continue
-        
-        # Execute handler
-        choice_num = int(choice)
         try:
+            print_menu()
+            choice = safe_input("Select an option [1-30], 'b' to return, or 'h' for help: ", allow_empty=True, default='')
+            
+            if choice is None or choice == '':
+                continue
+            
+            choice = choice.lower()
+            
+            # Handle special commands
+            if choice in ("h", "help"):
+                print_success(help_text)
+                pause("Press Enter to return to the menu...")
+                continue
+            
+            if choice == "b":
+                continue
+            
+            if choice == '0':
+                print_info("Exiting Android Suite. Goodbye!")
+                sys.exit(0)
+            
+            # Validate numeric choice
+            if not (choice.isdigit() and 1 <= int(choice) <= len(MENU_OPTIONS)):
+                print_error(f"Invalid option. Please select a valid option (1-{len(MENU_OPTIONS)}), 'b', or 'h'.")
+                pause()
+                continue
+            
+            # Execute handler
+            choice_num = int(choice)
             handler = handlers.get(choice_num)
             if handler:
                 handler()
+                
+        except KeyboardInterrupt:
+            print(f"\n{colors.YELLOW}[!] Operation cancelled.{colors.RESET}")
+            continue
         except Exception as e:
-            print_error(f"An error occurred: {e}")
+            print_error(f"An unexpected error occurred: {e}")
             pause()
 
 
@@ -1022,4 +1099,11 @@ def main():
 # =============================================================================
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{colors.YELLOW}[!] Interrupted. Exiting...{colors.RESET}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n[FATAL] {e}")
+        sys.exit(1)
