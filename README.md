@@ -148,38 +148,7 @@ MIT License
 
 ## Changelog
 
-### [2.5.1] - 2026-01-08
-- **IMPROVED:** Code organization
-  - Refactored main.py into modular structure with 29 handler functions
-  - Added proper section headers and documentation
-  - Single source of truth for VERSION constant
-- **NEW:** Progress bar for downloads (SDK, JADX, Frida server)
-- **NEW:** Tab completion for file paths (requires readline/pyreadline3)
-- **FIXED:** sdkmanager/avdmanager detection on Windows (.bat extension)
-- **FIXED:** Duplicate print statements in Deep Link tester
-- **CLEANUP:** Removed empty batch files, updated .gitignore
-
-### [2.5.0] - 2026-01-07
-- **NEW:** Deep Link Security Tester (Option 29)
-  - Extract deep links from AndroidManifest.xml
-  - 7 attack categories: Open Redirect, XSS, Path Traversal, SQLi, Auth Bypass, File Access, Intent Injection
-  - Full Test Mode (with device) + Offline Analysis Mode (no device required)
-  - Auto-discover decompiled manifest from common folder patterns
-  - Auto-decompile APK using apktool if manifest not found
-  - Risk assessment with severity ratings (HIGH/MEDIUM/LOW)
-  - JSON reports + ADB shell script generation
-  - Filters invalid `@string/` references and deduplicates findings
-- Updated menu to 30 options
-- Improved input validation and error handling
-
-### [2.0.0] - 2025-08-06
-- Added features 25-28:
-  - Sensitive Strings/Secrets Finder
-  - Automated Backup/Restore
-  - App Repackaging Utility
-  - Automated Uninstall/Cleaner
-- Fixed: All menu options now have corresponding, fully implemented methods
-- Improved error handling and user feedback
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ---
 
