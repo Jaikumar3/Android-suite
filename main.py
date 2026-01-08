@@ -4,7 +4,6 @@ Android Pentesting Automation Script
 Main entry point for the automation tool
 
 Author: Jai
-Version: 2.5.0
 """
 
 # =============================================================================

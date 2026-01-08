@@ -160,40 +160,56 @@ Desktop.ini
 *.temp
 *.bak
 
-# Downloaded tools
+# Downloaded tools (large binaries)
 *.jar
 *.zip
 *.xz
 *.tar.gz
-*.exe
 *.deb
 *.rpm
 
-# Tools directory (users install their own)
-tools/
+# Tools directory - large binaries (users install via installer.py)
+tools/android-sdk/
+tools/frida-server/
+tools/jadx*/
+tools/rootAVD/
+tools/*.0
 
-# Output directories
+# Keep tool scripts
+!tools/apk-components-inspector/
+!tools/frida-script-gen/
+!tools/fridump/
+!tools/apktool/
+
+# Output directories (generated content)
 output/
 reports/
 logs/
 
-# Installation reports
+# Installation reports (generated)
 installation_report.json
 
-# APK files (unless specifically needed)
+# APK files (test samples - too large for git)
 *.apk
 
 # Frida server binaries
 frida-server*
 
-# Certificates (sensitive)
+# Certificates (sensitive data)
 *.pem
 *.crt
 *.cer
 *.0
 
-# HTML coverage reports
-htmlcov/
+# Backup files
+*.backup
+*.bak
+*.old
 
-# Test APKs
+# Test APKs and temp files
 tests/*.apk
+tests/__pycache__/
+
+# IDE/Editor
+.vscode/settings.json
+*.code-workspace
