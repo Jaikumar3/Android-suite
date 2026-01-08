@@ -1342,10 +1342,12 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
 
     def _find_sdkmanager(self, android_sdk_dir):
         """Find sdkmanager executable"""
+        # On Windows, SDK tools are .bat files, not .exe
+        bat_ext = ".bat" if self.system == "windows" else ""
         possible_paths = [
-            android_sdk_dir / "cmdline-tools" / "latest" / "bin" / f"sdkmanager{self.exe_ext}",
-            android_sdk_dir / "cmdline-tools" / "bin" / f"sdkmanager{self.exe_ext}",
-            android_sdk_dir / "tools" / "bin" / f"sdkmanager{self.exe_ext}"
+            android_sdk_dir / "cmdline-tools" / "latest" / "bin" / f"sdkmanager{bat_ext}",
+            android_sdk_dir / "cmdline-tools" / "bin" / f"sdkmanager{bat_ext}",
+            android_sdk_dir / "tools" / "bin" / f"sdkmanager{bat_ext}"
         ]
         
         for path in possible_paths:
@@ -1353,14 +1355,16 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
                 return str(path)
         
         # Check in PATH
-        return shutil.which(f"sdkmanager{self.exe_ext}")
+        return shutil.which(f"sdkmanager{bat_ext}") or shutil.which("sdkmanager")
 
     def _find_avdmanager(self, android_sdk_dir):
         """Find avdmanager executable"""
+        # On Windows, SDK tools are .bat files, not .exe
+        bat_ext = ".bat" if self.system == "windows" else ""
         possible_paths = [
-            android_sdk_dir / "cmdline-tools" / "latest" / "bin" / f"avdmanager{self.exe_ext}",
-            android_sdk_dir / "cmdline-tools" / "bin" / f"avdmanager{self.exe_ext}",
-            android_sdk_dir / "tools" / "bin" / f"avdmanager{self.exe_ext}"
+            android_sdk_dir / "cmdline-tools" / "latest" / "bin" / f"avdmanager{bat_ext}",
+            android_sdk_dir / "cmdline-tools" / "bin" / f"avdmanager{bat_ext}",
+            android_sdk_dir / "tools" / "bin" / f"avdmanager{bat_ext}"
         ]
         
         for path in possible_paths:
@@ -1368,7 +1372,7 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
                 return str(path)
         
         # Check in PATH
-        return shutil.which(f"avdmanager{self.exe_ext}")
+        return shutil.which(f"avdmanager{bat_ext}") or shutil.which("avdmanager")
 
     def _configure_pentest_avd(self, avd_name):
         """Configure AVD for pentesting with optimized settings"""
