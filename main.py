@@ -46,7 +46,7 @@ except ImportError:
 # CONSTANTS
 # =============================================================================
 
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 AUTHOR = "Jai"
 
 MENU_OPTIONS = [

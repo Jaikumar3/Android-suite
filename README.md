@@ -1,7 +1,7 @@
 # Android Pentesting Suite
 
 **Author:** Jai  
-**Version:** 2.5.0
+**Version:** 2.5.1
 
 ## Overview
 
@@ -148,6 +148,17 @@ MIT License
 
 ## Changelog
 
+### [2.5.1] - 2026-01-08
+- **IMPROVED:** Code organization
+  - Refactored main.py into modular structure with 29 handler functions
+  - Added proper section headers and documentation
+  - Single source of truth for VERSION constant
+- **NEW:** Progress bar for downloads (SDK, JADX, Frida server)
+- **NEW:** Tab completion for file paths (requires readline/pyreadline3)
+- **FIXED:** sdkmanager/avdmanager detection on Windows (.bat extension)
+- **FIXED:** Duplicate print statements in Deep Link tester
+- **CLEANUP:** Removed empty batch files, updated .gitignore
+
 ### [2.5.0] - 2026-01-07
 - **NEW:** Deep Link Security Tester (Option 29)
   - Extract deep links from AndroidManifest.xml
@@ -173,3 +184,4 @@ MIT License
 ---
 
 **For more details, see the in-app help menu or comments in `main.py` and `installer.py`.**
+
