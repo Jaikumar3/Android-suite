@@ -257,7 +257,6 @@ class AndroidPentestInstaller:
         except subprocess.CalledProcessError as e:
             self.log_status(f"✗ Failed to install apkleaks: {e.stderr}", "ERROR")
             return False
-    """Installer class for Android pentesting tools and dependencies"""
     
     def __init__(self, tools_dir="./tools"):
         self.system = platform.system().lower()
@@ -270,6 +269,66 @@ class AndroidPentestInstaller:
         
         # Platform-specific executable extensions
         self.exe_ext = ".exe" if self.system == "windows" else ""
+        
+        # Track detected conflicts for user notification
+        self.detected_conflicts = []
+    
+    def check_conflicts(self):
+        """Check for potential conflicts before installation"""
+        self.detected_conflicts = []
+        
+        # Check Java version conflicts
+        java_info = self._check_java_availability()
+        if java_info.get("available") and java_info.get("version", 0) < 11:
+            self.detected_conflicts.append({
+                "type": "JAVA_VERSION",
+                "message": f"Java {java_info.get('version', 'unknown')} detected. SDK Manager requires Java 11+.",
+                "solution": "Install Java 11 or newer: https://adoptium.net/"
+            })
+        
+        # Check for existing tool installations that might conflict
+        existing_tools = []
+        import shutil as shutil_check
+        for tool in ["adb", "jadx", "apktool", "frida"]:
+            if shutil_check.which(tool):
+                existing_tools.append(tool)
+        
+        if existing_tools:
+            self.detected_conflicts.append({
+                "type": "EXISTING_TOOLS",
+                "message": f"Found existing installations: {', '.join(existing_tools)}",
+                "solution": "These tools will be used from PATH. Local versions will be in ./tools/"
+            })
+        
+        # Check disk space (need ~2GB for full install)
+        try:
+            total, used, free = shutil_check.disk_usage(self.tools_dir)
+            free_gb = free / (1024**3)
+            if free_gb < 2:
+                self.detected_conflicts.append({
+                    "type": "DISK_SPACE",
+                    "message": f"Low disk space: {free_gb:.1f}GB free",
+                    "solution": "Recommend at least 2GB free for full installation"
+                })
+        except:
+            pass
+        
+        return self.detected_conflicts
+    
+    def print_conflicts(self):
+        """Print detected conflicts to user"""
+        if not self.detected_conflicts:
+            self.log_status("No conflicts detected", "SUCCESS")
+            return
+        
+        print("\n" + "="*60)
+        print("⚠️  POTENTIAL CONFLICTS DETECTED")
+        print("="*60)
+        for conflict in self.detected_conflicts:
+            print(f"\n[{conflict['type']}]")
+            print(f"  Issue: {conflict['message']}")
+            print(f"  Fix: {conflict['solution']}")
+        print("\n" + "="*60 + "\n")
         
     def log_status(self, message, status="INFO"):
         """Log installation status"""
@@ -1527,6 +1586,8 @@ Examples:
                       help='Install Android Emulator with AVD setup for pentesting')
     parser.add_argument('--verify-only', action='store_true',
                       help='Only verify existing installations')
+    parser.add_argument('--skip-conflicts', action='store_true',
+                      help='Skip conflict check prompts (for automated installs)')
     parser.add_argument('--tools-dir', default='./tools',
                       help='Directory to install tools (default: ./tools)')
     
@@ -1556,6 +1617,22 @@ Examples:
     # Check Python version first
     if not installer.check_python_version():
         sys.exit(1)
+    
+    # Check for potential conflicts before installation
+    if not args.verify_only and not args.skip_conflicts:
+        conflicts = installer.check_conflicts()
+        if conflicts:
+            installer.print_conflicts()
+            response = input("Continue with installation? (y/N): ").strip().lower()
+            if response != 'y':
+                print("Installation cancelled.")
+                sys.exit(0)
+    elif not args.verify_only and args.skip_conflicts:
+        # Still check but don't prompt
+        conflicts = installer.check_conflicts()
+        if conflicts:
+            installer.print_conflicts()
+            installer.log_status("Skipping conflict prompt (--skip-conflicts)", "INFO")
     
     success = True
     
