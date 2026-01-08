@@ -2,16 +2,37 @@
 """
 Android Pentesting Automation Script
 Main entry point for the automation tool
+
+Author: Jai
+Version: 2.5.0
 """
 
+# =============================================================================
+# IMPORTS
+# =============================================================================
 
 import sys
 import os
 import argparse
-from android_pentest import AndroidPentester
-import config  # Import config with validators
+import subprocess
 
-# Tab completion support
+# Local imports
+from android_pentest import AndroidPentester
+import config
+
+# =============================================================================
+# OPTIONAL IMPORTS (graceful degradation)
+# =============================================================================
+
+# Colorama for colored output
+try:
+    from colorama import Fore, Style, init as colorama_init
+    colorama_init(autoreset=True)
+    COLOR_ENABLED = True
+except ImportError:
+    COLOR_ENABLED = False
+
+# Readline for tab completion
 try:
     import readline
     READLINE_AVAILABLE = True
@@ -22,18 +43,89 @@ except ImportError:
     except ImportError:
         READLINE_AVAILABLE = False
 
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+VERSION = "2.5.0"
+AUTHOR = "Jai"
+
+MENU_OPTIONS = [
+    ("Install/verify tools (open installer)", "Install or verify all required tools in the ./tools directory."),
+    ("Check emulator root status", "Check if connected emulator has root access and writable system partition."),
+    ("Setup emulator (Play Store + Root)", "Guide to setup Android emulator with Play Store and root access."),
+    ("Get PID for package name", "Find the process ID for a given Android package name."),
+    ("Install APK via ADB", "Install an APK file to the connected Android device using ADB."),
+    ("Uninstall APK via ADB", "Uninstall an app from the device using its package name."),
+    ("Push file to device via ADB", "Copy a file from your computer to the Android device."),
+    ("Pull file from device via ADB", "Copy a file from the Android device to your computer."),
+    ("Collect device information", "Gather information about the connected Android device."),
+    ("Setup Frida server (interactive)", "Interactive setup with version selection from GitHub releases."),
+    ("Stop Frida server on device", "Stop/kill the Frida server process on the device."),
+    ("Get process list", "List all running processes on the device."),
+    ("View/Save Logcat Output", "View or save the device's logcat output."),
+    ("List installed packages", "List all installed package names on the connected device."),
+    ("Dump app memory with fridump", "Dump running app memory using fridump and Frida (requires package name/PID)."),
+    ("APKTool decompile APK", "Decompile an APK using APKTool."),
+    ("Run APKLeaks on APK", "Scan an APK for secrets using APKLeaks."),
+    ("Extract app data directory", "Extract the /data/data/<package> directory from the device (root required)."),
+    ("Run apk-components-inspector on APK", "Analyze APK components using apk-components-inspector."),
+    ("Run frida-script-gen (generate Frida scripts)", "Generate Frida scripts using frida-script-gen tool."),
+    ("Run MobApp-Storage-Inspector on APK", "Analyze APK storage using MobApp-Storage-Inspector.jar."),
+    ("Setup Burp Suite CA certificate", "Install Burp Suite CA certificate for HTTPS interception."),
+    ("Objection Testing Suite", "Comprehensive Android app testing with Objection framework."),
+    ("Create/Launch AVD with Magisk+Xposed", "Automate AVD creation with Magisk and Xposed."),
+    ("Sensitive Strings/Secrets Finder", "Scan APK or decompiled code for sensitive strings."),
+    ("Automated Backup/Restore", "Backup and restore app data using ADB."),
+    ("App Repackaging Utility", "Repackage APKs after modification."),
+    ("Automated Uninstall/Cleaner", "Uninstall app and clean up related files."),
+    ("Deep Link Security Tester", "Test deep links for security vulnerabilities."),
+    ("Exit", "Exit the Android Suite."),
+]
+
+# =============================================================================
+# COLOR HELPERS
+# =============================================================================
+
+class Colors:
+    """Color constants for terminal output"""
+    
+    def __init__(self):
+        if COLOR_ENABLED:
+            self.GREEN = Fore.GREEN
+            self.CYAN = Fore.CYAN
+            self.YELLOW = Fore.YELLOW
+            self.RED = Fore.RED
+            self.WHITE = Fore.WHITE
+            self.RESET = Style.RESET_ALL
+        else:
+            self.GREEN = ''
+            self.CYAN = ''
+            self.YELLOW = ''
+            self.RED = ''
+            self.WHITE = ''
+            self.RESET = ''
+
+# Global colors instance
+colors = Colors()
+
+# =============================================================================
+# TAB COMPLETION
+# =============================================================================
 
 class PathCompleter:
     """Tab completion for file paths and common inputs"""
     
     def __init__(self):
         self.matches = []
-        self.completion_type = 'path'  # 'path', 'package', 'menu'
+        self.completion_type = 'path'
     
     def set_type(self, completion_type):
+        """Set completion type: 'path', 'package', or 'menu'"""
         self.completion_type = completion_type
     
     def complete(self, text, state):
+        """Main completion function called by readline"""
         if state == 0:
             if self.completion_type == 'path':
                 self.matches = self._path_complete(text)
@@ -54,30 +146,18 @@ class PathCompleter:
         import glob
         if not text:
             text = './'
-        
-        # Handle ~ for home directory
         if text.startswith('~'):
             text = os.path.expanduser(text)
-        
-        # Get matches
         if os.path.isdir(text) and not text.endswith(os.sep):
             text += os.sep
-        
         matches = glob.glob(text + '*')
-        
-        # Add trailing slash for directories
-        matches = [m + os.sep if os.path.isdir(m) else m for m in matches]
-        
-        return matches
+        return [m + os.sep if os.path.isdir(m) else m for m in matches]
     
     def _package_complete(self, text):
-        """Complete package names (common prefixes)"""
-        common_prefixes = [
-            'com.', 'org.', 'io.', 'net.', 'app.',
-            'com.android.', 'com.google.', 'com.facebook.',
-            'com.example.', 'com.test.'
-        ]
-        return [p for p in common_prefixes if p.startswith(text)]
+        """Complete package names with common prefixes"""
+        prefixes = ['com.', 'org.', 'io.', 'net.', 'app.',
+                    'com.android.', 'com.google.', 'com.example.']
+        return [p for p in prefixes if p.startswith(text)]
     
     def _menu_complete(self, text):
         """Complete menu options"""
@@ -86,99 +166,53 @@ class PathCompleter:
 
 
 def setup_tab_completion():
-    """Initialize tab completion if available"""
+    """Initialize tab completion if readline is available"""
     if not READLINE_AVAILABLE:
         return None
-    
     completer = PathCompleter()
     readline.set_completer(completer.complete)
     readline.parse_and_bind('tab: complete')
-    
-    # Set completion delimiters
     readline.set_completer_delims(' \t\n;')
-    
     return completer
 
+# =============================================================================
+# UI HELPERS
+# =============================================================================
 
-def input_with_completion(prompt, completer=None, completion_type='path'):
-    """Input with tab completion support"""
-    if completer:
-        completer.set_type(completion_type)
-    return input(prompt).strip()
-
-
-try:
-    from colorama import Fore, Style, init as colorama_init
-    colorama_init(autoreset=True)
-    COLOR_ENABLED = True
-except ImportError:
-    COLOR_ENABLED = False
-
-VERSION = "2.5.0"
-
-MENU_OPTIONS = [
-    ("Install/verify tools (open installer)", "Install or verify all required tools in the ./tools directory."),
-    ("Check emulator root status", "Check if connected emulator has root access and writable system partition."),
-    ("Setup emulator (Play Store + Root)", "Guide to setup Android emulator with Play Store and root access."),
-    ("Get PID for package name", "Find the process ID for a given Android package name."),
-    ("Install APK via ADB", "Install an APK file to the connected Android device using ADB."),
-    ("Uninstall APK via ADB", "Uninstall an app from the device using its package name."),
-    ("Push file to device via ADB", "Copy a file from your computer to the Android device."),
-    ("Pull file from device via ADB", "Copy a file from the Android device to your computer."),
-    ("Collect device information", "Gather information about the connected Android device."),
-    ("Setup Frida server (interactive)", "Interactive setup with version selection from GitHub releases."),
-    ("Stop Frida server on device", "Stop/kill the Frida server process on the device."),
-    ("Get process list", "List all running processes on the device."),
-    ("View/Save Logcat Output", "View or save the device's logcat output."),
-    ("List installed packages", "List all installed package names on the connected device."),
-    ("Dump app memory with fridump", "Dump running app memory using fridump and Frida (requires package name/PID)."),
-    ("APKTool decompile APK", "Decompile an APK using APKTool."),
-    ("Run APKLeaks on APK", "Scan an APK for secrets using APKLeaks."),
-    ("Extract app data directory", "Extract the /data/data/<package> directory from the device (root required, 10min timeout with extension option)."),
-    ("Run apk-components-inspector on APK", "Analyze APK components using apk-components-inspector."),
-    ("Run frida-script-gen (generate Frida scripts)", "Generate Frida scripts using frida-script-gen tool."),
-    ("Run MobApp-Storage-Inspector on APK", "Analyze APK storage using MobApp-Storage-Inspector.jar."),
-    ("Setup Burp Suite CA certificate", "Install Burp Suite CA certificate to Android device/emulator for HTTPS interception."),
-    ("Objection Testing Suite", "Comprehensive Android app testing with Objection framework."),
-    ("Create/Launch AVD with Magisk+Xposed (root, writable)", "Automate AVD creation and patching with Magisk and Xposed, with writable system and root."),
-    ("Sensitive Strings/Secrets Finder", "Scan APK or decompiled code for sensitive strings, secrets, and credentials."),
-    ("Automated Backup/Restore", "Backup and restore app data using ADB (root required for some apps)."),
-    ("App Repackaging Utility", "Repackage APKs after modification for testing or bypassing protections."),
-    ("Automated Uninstall/Cleaner", "Uninstall app and optionally clean up related files and data."),
-    ("Deep Link Security Tester", "Test deep links for Open Redirect, XSS, Auth Bypass, Intent Injection vulnerabilities."),
-    ("Exit", "Exit the Android Suite."),
-]
-
-
-if __name__ == "__main__":
+def clear_screen():
+    """Clear terminal screen"""
     os.system('cls' if os.name == 'nt' else 'clear')
-    
-    # Initialize tab completion
-    completer = setup_tab_completion()
-    if completer and READLINE_AVAILABLE:
-        print(f"[+] Tab completion enabled for file paths")
-    
-    # Define color variables at the top level for global use
-    color_green = Fore.GREEN if COLOR_ENABLED else ''
-    color_cyan = Fore.CYAN if COLOR_ENABLED else ''
-    color_yellow = Fore.YELLOW if COLOR_ENABLED else ''
-    color_red = Fore.RED if COLOR_ENABLED else ''
-    color_white = Fore.WHITE if COLOR_ENABLED else ''
-    color_reset = Style.RESET_ALL if COLOR_ENABLED else ''
-    
-    banner = f"""
-{color_green}======================================
+
+
+def print_banner():
+    """Print application banner"""
+    print(f"""
+{colors.GREEN}======================================
 Android Suite
-Author: Jai
+Author: {AUTHOR}
 Version: {VERSION:<10}
-======================================{color_reset}
-    """
-    print(banner)
+======================================{colors.RESET}
+    """)
+
+
+def print_menu():
+    """Print main menu options"""
+    print("")
+    for idx, (option, _) in enumerate(MENU_OPTIONS, 1):
+        print(f"{colors.CYAN}[{idx:>2}]{colors.RESET}  {colors.WHITE}{option}{colors.RESET}")
+    print(f"{colors.CYAN}[ b]{colors.RESET}  {colors.WHITE}Back to main menu{colors.RESET}")
+    print(f"{colors.CYAN}[ h]{colors.RESET}  {colors.WHITE}Help - Show detailed descriptions{colors.RESET}")
+    print(f"{colors.CYAN}[ 0]{colors.RESET}  {colors.WHITE}Exit Android Suite{colors.RESET}")
+    print("")
+
+
+def get_help_text():
+    """Generate help text with all menu options"""
     help_text = """
 Help - Android Suite Menu Options:
 ----------------------------------
 NAVIGATION:
-  [1-29] Select a menu option to execute
+  [1-30] Select a menu option to execute
   [  b ] Back to main menu (or exit current submenu)
   [  h ] Show this help message
   [  0 ] Exit Android Suite completely
@@ -187,902 +221,806 @@ MENU OPTIONS:
 """
     for idx, (option, desc) in enumerate(MENU_OPTIONS, 1):
         help_text += f"[ {idx:<2}] {option:<40} - {desc}\n"
-    help_text += "\nTIP: Most submenus support 'b' to go back to the previous menu level.\n"
+    help_text += "\nTIP: Press Tab for file path completion.\n"
+    return help_text
 
+
+def get_input(prompt):
+    """Get user input with colored prompt"""
+    return input(f"{colors.YELLOW}{prompt}{colors.RESET}").strip()
+
+
+def print_success(message):
+    """Print success message in green"""
+    print(f"{colors.GREEN}{message}{colors.RESET}")
+
+
+def print_error(message):
+    """Print error message in red"""
+    print(f"{colors.RED}{message}{colors.RESET}")
+
+
+def print_warning(message):
+    """Print warning message in yellow"""
+    print(f"{colors.YELLOW}{message}{colors.RESET}")
+
+
+def print_info(message):
+    """Print info message in cyan"""
+    print(f"{colors.CYAN}{message}{colors.RESET}")
+
+
+def pause(message="Press Enter to continue..."):
+    """Pause and wait for user input"""
+    input(f"{colors.YELLOW}{message}{colors.RESET}")
+
+# =============================================================================
+# MENU HANDLERS
+# =============================================================================
+
+def handle_option_1():
+    """Handle: Install/verify tools"""
+    print_warning("\nAndroid Suite Installer:")
+    print_info("The installer has been streamlined for better user experience.")
+    print(f"{colors.CYAN}1.{colors.RESET} Install all tools (recommended)")
+    print(f"{colors.CYAN}2.{colors.RESET} Install emulator only")
+    print(f"{colors.CYAN}3.{colors.RESET} Verify existing installation")
+    print(f"{colors.CYAN}b.{colors.RESET} Back to main menu")
+    
+    choice = get_input("\nSelect installation option [1-3] or 'b' to go back: ").lower()
+    
+    if choice == 'b':
+        return
+    
+    os.makedirs("tools", exist_ok=True)
+    print_warning("Starting installation. This may take several minutes...")
+    
+    if choice == "1":
+        subprocess.run([sys.executable, "installer.py", "--all-tools"], check=False)
+    elif choice == "2":
+        subprocess.run([sys.executable, "installer.py", "--emulator"], check=False)
+    elif choice == "3":
+        subprocess.run([sys.executable, "installer.py", "--verify-only"], check=False)
+    else:
+        print_error("Invalid choice. Returning to main menu...")
+
+
+def handle_option_2():
+    """Handle: Check emulator root status"""
+    print_warning("\nChecking emulator root status...")
+    device_id = get_input("Enter device ID (optional, will auto-detect): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    
+    is_emulator, has_root, is_writable, message = pentester.check_emulator_root_status()
+    
+    print_info("\nEmulator Status:")
+    print(message)
+    
+    if is_emulator and has_root and is_writable:
+        print_success("\n✓ Perfect! Emulator is ready for pentesting.")
+    elif is_emulator and has_root:
+        print_warning("\n! Almost ready. Run 'adb remount' to enable system writes.")
+    elif is_emulator:
+        print_warning("\n! Root access needed. Start emulator with -writable-system flag.")
+    else:
+        print_error("\n! Physical device detected. Limited pentesting capabilities.")
+
+
+def handle_option_3():
+    """Handle: Setup emulator with Play Store + Root"""
+    print_warning("\nSetting up Android Emulator with Play Store + Root...")
+    pentester = AndroidPentester(apk_path=None)
+    pentester._setup_adb_connection()
+    pentester.setup_emulator_with_playstore_and_root()
+
+
+def handle_option_4():
+    """Handle: Get PID for package name"""
+    package = get_input("Enter package name (e.g. com.example.app): ")
+    valid, err = config.validate_package_name(package)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
+    pentester._setup_adb_connection()
+    matches = pentester.get_pid_for_package(package)
+    
+    if matches:
+        for pid, proc_name in matches:
+            print_success(f"PID for {package}: {pid} (process: {proc_name})")
+    else:
+        print_warning(f"No running process found for package: {package}")
+
+
+def handle_option_5():
+    """Handle: Install APK via ADB"""
+    apk_path = get_input("Enter APK file path to install: ")
+    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=apk_path, device_id=device_id)
+    pentester._setup_adb_connection()
+    result = pentester.adb_install_apk(apk_path, device_id=device_id)
+    
+    if result:
+        print_success("Install result: Success")
+    else:
+        print_error("Install result: Failed")
+
+
+def handle_option_6():
+    """Handle: Uninstall APK via ADB"""
+    package = get_input("Enter package name to uninstall: ")
+    valid, err = config.validate_package_name(package)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
+    pentester._setup_adb_connection()
+    result = pentester.adb_uninstall_apk(package, device_id=device_id)
+    
+    if result:
+        print_success("Uninstall result: Success")
+    else:
+        print_error("Uninstall result: Failed")
+
+
+def handle_option_7():
+    """Handle: Push file to device"""
+    local_path = get_input("Enter local file path to push: ")
+    valid, err = config.validate_file_path(local_path, must_exist=True)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    remote_path = get_input("Enter remote path on device: ")
+    valid, err = config.validate_remote_path(remote_path)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    result = pentester.adb_push_file(local_path, remote_path, device_id=device_id)
+    
+    if result:
+        print_success("Push result: Success")
+    else:
+        print_error("Push result: Failed")
+
+
+def handle_option_8():
+    """Handle: Pull file from device"""
+    remote_path = get_input("Enter remote file path on device to pull: ")
+    valid, err = config.validate_remote_path(remote_path)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    local_path = get_input("Enter local destination path: ")
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    result = pentester.adb_pull_file(remote_path, local_path, device_id=device_id)
+    
+    if result:
+        print_success("Pull result: Success")
+    else:
+        print_error("Pull result: Failed")
+
+
+def handle_option_9():
+    """Handle: Collect device information"""
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    info = pentester._collect_device_info()
+    
+    if not info:
+        print_error("No device information could be collected.")
+    else:
+        print_success("Device info:")
+        for k, v in info.items():
+            print(f"{colors.CYAN}{k}: {colors.WHITE}{v}{colors.RESET}")
+
+
+def handle_option_10():
+    """Handle: Setup Frida server (interactive)"""
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    
+    if not pentester._setup_adb_connection():
+        print_error("Failed to connect to Android device. Please check device connection.")
+        return
+    
+    result = pentester.setup_frida_server_interactive()
+    
+    if result:
+        print_success("✅ Frida server setup completed successfully!")
+    else:
+        print_error("❌ Frida server setup failed.")
+        print_warning("💡 Tips for troubleshooting:")
+        print("   • Ensure device is rooted or use an emulator")
+        print("   • Check internet connection for downloading Frida server")
+        print("   • Verify device architecture compatibility")
+
+
+def handle_option_11():
+    """Handle: Stop Frida server"""
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    pentester.menu_stop_frida_server()
+
+
+def handle_option_12():
+    """Handle: Get process list"""
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    procs = pentester.get_process_list()
+    
+    if not procs:
+        print_warning("No running processes found.")
+    else:
+        for proc in procs:
+            print_success(f"PID: {proc['pid']}, Name: {proc['name']}")
+
+
+def handle_option_13():
+    """Handle: View/Save Logcat Output"""
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    
+    filter_tag = get_input("Enter logcat filter tag (optional): ") or None
+    lines_input = get_input("How many log lines to fetch? [default 200]: ")
+    
+    valid, lines, err = config.validate_integer(lines_input, min_val=1, max_val=10000, default=200)
+    if not valid:
+        print_warning(f"[!] {err}, using default 200")
+        lines = 200
+    
+    save_path = get_input("Enter file path to save logcat (leave blank for ./output/logcat.txt): ") or None
+    if save_path is None:
+        os.makedirs("output", exist_ok=True)
+        save_path = "output/logcat.txt"
+    
+    pentester.get_logcat(filter_tag=filter_tag, save_to_file=save_path, lines=lines)
+    print_success(f"Logcat output saved to {save_path}")
+
+
+def handle_option_14():
+    """Handle: List installed packages"""
+    device_id = get_input("Enter device ID (optional): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    success, packages, message = pentester.list_installed_packages(device_id=device_id)
+    
+    if success:
+        print_success(f"\n{message}")
+        print_success("\nInstalled packages:")
+        for i, pkg in enumerate(packages, 1):
+            print_info(f"{i:3d}. {pkg}")
+    else:
+        print_error(message)
+
+
+def handle_option_15():
+    """Handle: Dump app memory with fridump"""
+    print_info("[i] Fridump will dump memory from a running app process.")
+    print_info("[i] Make sure the target app is running on the device.")
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    package = get_input("Enter package name (required): ")
+    
+    valid, err = config.validate_package_name(package)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    pentester = AndroidPentester(app_name=package, device_id=device_id)
+    pentester._setup_adb_connection()
+    pentester._setup_frida_server_optional()
+    
+    output_dir = get_input("Enter output directory (leave blank for ./output/fridump): ") or 'output/fridump'
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print_info("[i] Fridump options:")
+    strings_mode = config.validate_yes_no(get_input("Extract strings from memory dumps? (y/N): "))
+    read_only = config.validate_yes_no(get_input("Include read-only memory regions? (y/N): "))
+    
+    print_info(f"[i] Running fridump on package: {package}")
+    success, message = pentester.run_fridump(output_dir=output_dir, strings_mode=strings_mode, read_only=read_only)
+    
+    if success:
+        print_success(message)
+    else:
+        print_error(message)
+    
+    pause()
+
+
+def handle_option_16():
+    """Handle: APKTool decompile APK"""
+    apk_path = get_input("Enter APK file path to decompile: ")
+    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    output_dir = get_input("Enter output directory [leave blank for ./output/decompiled]: ") or 'output/decompiled'
+    os.makedirs(output_dir, exist_ok=True)
+    
+    pentester = AndroidPentester(apk_path=apk_path)
+    
+    # APKTool
+    print_warning("Running APKTool...")
+    apktool_success, stdout, stderr, message = pentester.run_apktool(apk_path, output_dir=output_dir)
+    if apktool_success:
+        print_success(f"APKTool decompilation complete. Output in {output_dir}")
+    else:
+        print_error("APKTool decompilation failed.")
+    
+    # JADX
+    jadx_dir = os.path.join(output_dir, "jadx")
+    print_warning("Running JADX...")
+    success, stdout, stderr, message = pentester.run_jadx_decompile(apk_path, output_dir=jadx_dir)
+    if success:
+        print_success(message)
+    else:
+        print_error(message)
+
+
+def handle_option_17():
+    """Handle: Run APKLeaks on APK"""
+    apk_path = get_input("Enter APK file path to scan: ")
+    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    output_path = get_input("Enter output file [leave blank for ./output/apkleaks/report.txt]: ") or 'output/apkleaks/report.txt'
+    if output_path.endswith(os.sep) or not os.path.splitext(output_path)[1]:
+        output_path = os.path.join(output_path, 'report.txt')
+    
+    output_dir = os.path.dirname(output_path)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    cmd = ["apkleaks", "-f", apk_path, "-o", output_path]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print_success(f"APKLeaks scan complete. Output in {output_path}")
+        if result.stdout:
+            print_info(f"--- APKLeaks STDOUT ---\n{result.stdout}")
+    except subprocess.CalledProcessError as e:
+        print_error(f"APKLeaks scan failed: {e}")
+
+
+def handle_option_18():
+    """Handle: Extract app data directory"""
+    package = get_input("Enter package name to extract data for: ")
+    valid, err = config.validate_package_name(package)
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    dest_dir = get_input("Enter local destination directory (leave blank for ./output/appdata): ") or "output/appdata"
+    use_compression = config.validate_yes_no(get_input("Use compression for large data? (y/N): "))
+    
+    os.makedirs(dest_dir, exist_ok=True)
+    
+    pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
+    pentester._setup_adb_connection()
+    result, message = pentester.extract_app_data_directory(package, dest_dir, device_id=device_id, use_compression=use_compression)
+    
+    if result:
+        print_success(message)
+    else:
+        print_error(message)
+
+
+def handle_option_19():
+    """Handle: Run apk-components-inspector"""
+    apk_path = get_input("Enter APK file path to analyze: ")
+    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    print_warning("Running apk-components-inspector...")
+    pentester = AndroidPentester(apk_path=apk_path)
+    success, stdout, stderr, message = pentester.run_apk_components_inspector(apk_path)
+    
+    print_info("--- apk-components-inspector STDOUT ---")
+    print(stdout if stdout else f"{colors.YELLOW}[No stdout output]{colors.RESET}")
+    print_info("--- apk-components-inspector STDERR ---")
+    print(stderr if stderr else f"{colors.YELLOW}[No stderr output]{colors.RESET}")
+    
+    if success:
+        print_success(message)
+    else:
+        print_error(message)
+
+
+def handle_option_20():
+    """Handle: Run frida-script-gen"""
+    apk_path = get_input("Enter APK file path (required): ")
+    if not apk_path or not os.path.exists(apk_path):
+        print_error("[!] APK file not found.")
+        return
+    
+    output_file = get_input("Enter output file (leave blank if not needed): ") or None
+    extra_args = get_input("Enter extra arguments (space separated, leave blank if none): ")
+    extra_args_list = extra_args.split() if extra_args else None
+    
+    print_warning("Running frida-script-gen...")
+    pentester = AndroidPentester(apk_path=apk_path)
+    success, stdout, stderr, message = pentester.run_frida_script_gen(apk_path, output_file, extra_args_list)
+    
+    if success:
+        if stdout:
+            print_success(stdout)
+        print_success(message)
+    else:
+        print_error(message)
+        if stderr:
+            print_error(stderr)
+
+
+def handle_option_21():
+    """Handle: Run MobApp-Storage-Inspector"""
+    print_warning("Launching MobApp-Storage-Inspector GUI...")
+    apk_path = get_input("Enter APK file path (required): ")
+    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
+    if not valid:
+        print_error(f"[!] {err}")
+        return
+    
+    pentester = AndroidPentester(apk_path=apk_path)
+    success, stdout, stderr, message = pentester.run_mobapp_storage_inspector(apk_path)
+    
+    if success:
+        print_success(message)
+    else:
+        print_error(message)
+
+
+def handle_option_22():
+    """Handle: Setup Burp Suite CA certificate"""
+    print_warning("\nBurp Suite CA Certificate Setup")
+    print_info("This will install the Burp Suite CA certificate on your device/emulator.")
+    
+    device_id = get_input("Enter device ID (optional): ") or None
+    cert_path = get_input("Enter path to Burp CA certificate (leave blank to use default ./tools/burp_cert.pem): ") or None
+    
+    pentester = AndroidPentester(apk_path=None, device_id=device_id)
+    pentester._setup_adb_connection()
+    
+    result = pentester.setup_burp_certificate(cert_path=cert_path, device_id=device_id)
+    if result:
+        print_success("✅ Burp Suite CA certificate installed successfully!")
+    else:
+        print_error("❌ Failed to install Burp Suite CA certificate.")
+
+
+def handle_option_23():
+    """Handle: Objection Testing Suite"""
+    print_warning("\nObjection Testing Suite")
+    
+    try:
+        from objection_module import ObjectionTester
+        
+        package = get_input("Enter package name to test: ")
+        valid, err = config.validate_package_name(package)
+        if not valid:
+            print_error(f"[!] {err}")
+            return
+        
+        device_id = get_input("Enter device ID (optional): ") or None
+        
+        objection_tester = ObjectionTester(package_name=package, device_id=device_id)
+        objection_tester.run_menu()
+        
+    except ImportError:
+        print_error("[!] Could not import objection_module. Make sure objection_module.py exists.")
+    except Exception as e:
+        print_error(f"[!] Error initializing Objection tester: {str(e)}")
+
+
+def handle_option_24():
+    """Handle: Create/Launch AVD with Magisk+Xposed"""
+    print_warning("\nLaunching AVD with Magisk and Xposed (root, writable system)...")
+    
+    try:
+        import avd_magisk_xposed
+        avd_magisk_xposed.create_avd_with_magisk_xposed()
+        print_success("AVD launch script executed. Check emulator window for progress.")
+    except Exception as e:
+        print_error(f"Error running avd_magisk_xposed: {e}")
+    
+    pause()
+
+
+def handle_option_25():
+    """Handle: Sensitive Strings/Secrets Finder"""
+    print_warning("\nSensitive Strings/Secrets Finder")
+    
+    apk_path = get_input("Enter APK path (or leave blank to use last set path): ") or None
+    
+    pentester = AndroidPentester(apk_path=apk_path)
+    pentester._setup_adb_connection()
+    
+    results = pentester.find_sensitive_strings()
+    
+    if results:
+        print_success("Sensitive strings/secrets found:")
+        for r in results:
+            print_info(r)
+    else:
+        print_warning("No sensitive strings or secrets found.")
+    
+    pause()
+
+
+def handle_option_26():
+    """Handle: Automated Backup/Restore"""
+    print_warning("\nAutomated Backup/Restore")
+    
+    package = get_input("Enter package name to backup/restore: ")
+    
+    pentester = AndroidPentester(apk_path=None)
+    pentester._setup_adb_connection()
+    
+    print(f"{colors.CYAN}1.{colors.RESET} Backup app data")
+    print(f"{colors.CYAN}2.{colors.RESET} Restore app data")
+    print(f"{colors.CYAN}b.{colors.RESET} Back to main menu")
+    
+    choice = get_input("Select option [1-2] or 'b': ").lower()
+    
+    if choice == '1':
+        backup_path = get_input("Enter backup output path (default: ./output/backup.ab): ") or "./output/backup.ab"
+        pentester.adb_backup_app(package, backup_path)
+    elif choice == '2':
+        backup_path = get_input("Enter backup file path to restore: ")
+        pentester.adb_restore_app(package, backup_path)
+    
+    pause()
+
+
+def handle_option_27():
+    """Handle: App Repackaging Utility"""
+    print_warning("\nApp Repackaging Utility")
+    
+    apk_path = get_input("Enter APK path to repackage: ")
+    output_path = get_input("Enter output path (default: ./output/repackaged.apk): ") or "./output/repackaged.apk"
+    
+    pentester = AndroidPentester(apk_path=apk_path)
+    pentester.repackage_apk(output_path)
+    
+    pause()
+
+
+def handle_option_28():
+    """Handle: Automated Uninstall/Cleaner"""
+    print_warning("\nAutomated Uninstall/Cleaner")
+    
+    package = get_input("Enter package name to uninstall and clean: ")
+    
+    pentester = AndroidPentester(apk_path=None)
+    pentester._setup_adb_connection()
+    pentester.uninstall_app_and_clean(package)
+    
+    pause()
+
+
+def handle_option_29():
+    """Handle: Deep Link Security Tester"""
+    print_warning("\nDeep Link Security Tester")
+    print_info("Based on HackTricks, Oversecured & 8ksec Research")
+    
+    print(f"\n{colors.WHITE}This tool tests deep links for:{colors.RESET}")
+    print("  • Open Redirect vulnerabilities")
+    print("  • XSS/JavaScript Injection")
+    print("  • Path Traversal attacks")
+    print("  • SQL Injection")
+    print("  • Authentication Bypass")
+    print("  • Intent Injection (component hijacking)")
+    print("  • File/Content Provider access")
+    
+    print_info("\nSelect Mode:")
+    print(f"  {colors.GREEN}1.{colors.RESET} Full Test (requires device/emulator)")
+    print(f"  {colors.GREEN}2.{colors.RESET} Offline Analysis (no device needed)")
+    print(f"  {colors.GREEN}b.{colors.RESET} Back to main menu")
+    
+    mode_choice = get_input("\nSelect mode [1-2] or 'b': ").lower()
+    
+    if mode_choice == 'b':
+        return
+    
+    offline_mode = (mode_choice == '2')
+    
+    if offline_mode:
+        print_info("\n[OFFLINE MODE] Extract & analyze deep links without device")
+    else:
+        print_info("\n[FULL TEST MODE] Will execute tests on connected device")
+    
+    print_info("\nInput options:")
+    print("  1. APK file path (will extract manifest)")
+    print("  2. Decompiled manifest path")
+    print("  3. Both APK and manifest")
+    
+    apk_path = get_input("\nEnter APK path (or press Enter to skip): ") or None
+    if apk_path:
+        valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
+        if not valid:
+            print_error(f"[!] {err}")
+            apk_path = None
+    
+    manifest_path = get_input("Enter AndroidManifest.xml path (or press Enter to auto-detect): ") or None
+    if manifest_path:
+        valid, err = config.validate_file_path(manifest_path, must_exist=True)
+        if not valid:
+            print_error(f"[!] {err}")
+            manifest_path = None
+    
+    package_name = get_input("Enter package name (optional, for intent tests): ") or None
+    
+    if not apk_path and not manifest_path:
+        print_error("[!] Please provide either an APK path or manifest path")
+        pause()
+        return
+    
+    pentester = AndroidPentester(apk_path=apk_path)
+    
+    if offline_mode:
+        print_success("\nStarting Offline Deep Link Analysis...")
+        results = pentester.run_deeplink_offline_analysis(
+            apk_path=apk_path,
+            package_name=package_name,
+            manifest_path=manifest_path
+        )
+    else:
+        print_success("\nStarting Deep Link Security Test...")
+        pentester._setup_adb_connection()
+        results = pentester.run_deeplink_security_test(
+            apk_path=apk_path,
+            package_name=package_name,
+            manifest_path=manifest_path
+        )
+        
+        # Offer manual testing
+        if results.get('deep_links'):
+            manual_test = get_input("\nTest a specific deep link manually? (y/n): ").lower()
+            if manual_test == 'y':
+                print_info("\nAvailable deep links:")
+                for i, link in enumerate(results['deep_links'], 1):
+                    scheme = link.get('scheme', '')
+                    host = link.get('host', '')
+                    path = link.get('path', '')
+                    uri = f"{scheme}://{host}{path}" if host else f"{scheme}://{path}"
+                    print(f"  [{i}] {uri}")
+                
+                custom_uri = get_input("\nEnter custom deep link URI to test: ")
+                if custom_uri:
+                    print(f"[*] Testing: {custom_uri}")
+                    test_result = pentester.execute_deeplink_test(custom_uri)
+                    print(f"[*] Result: {'Success' if test_result['success'] else 'Failed'}")
+                    print(f"[*] Response: {test_result.get('response', 'N/A')[:200]}")
+                    if test_result.get('indicators'):
+                        print(f"[*] Indicators: {', '.join(test_result['indicators'])}")
+    
+    pause()
+
+
+# =============================================================================
+# MAIN LOOP
+# =============================================================================
+
+def main():
+    """Main application entry point"""
+    clear_screen()
+    
+    # Initialize tab completion
+    completer = setup_tab_completion()
+    if completer and READLINE_AVAILABLE:
+        print("[+] Tab completion enabled for file paths")
+    
+    print_banner()
+    help_text = get_help_text()
+    
+    # Menu handler mapping
+    handlers = {
+        1: handle_option_1,
+        2: handle_option_2,
+        3: handle_option_3,
+        4: handle_option_4,
+        5: handle_option_5,
+        6: handle_option_6,
+        7: handle_option_7,
+        8: handle_option_8,
+        9: handle_option_9,
+        10: handle_option_10,
+        11: handle_option_11,
+        12: handle_option_12,
+        13: handle_option_13,
+        14: handle_option_14,
+        15: handle_option_15,
+        16: handle_option_16,
+        17: handle_option_17,
+        18: handle_option_18,
+        19: handle_option_19,
+        20: handle_option_20,
+        21: handle_option_21,
+        22: handle_option_22,
+        23: handle_option_23,
+        24: handle_option_24,
+        25: handle_option_25,
+        26: handle_option_26,
+        27: handle_option_27,
+        28: handle_option_28,
+        29: handle_option_29,
+        30: lambda: sys.exit(0),
+    }
+    
     while True:
-        # Print menu
-        print("")
-        for idx, (option, _) in enumerate(MENU_OPTIONS, 1):
-            if COLOR_ENABLED:
-                print(f"{color_cyan}[{idx:>2}]{color_reset}  {color_white}{option:<32}{color_reset}")
-            else:
-                print(f"[{idx:>2}]  {option:<32}")
-        if COLOR_ENABLED:
-            print(f"{color_cyan}[ b]{color_reset}  {color_white}Back to main menu{color_reset}")
-            print(f"{color_cyan}[ h]{color_reset}  {color_white}Help - Show detailed descriptions{color_reset}")
-            print(f"{color_cyan}[ 0]{color_reset}  {color_white}Exit Android Suite{color_reset}")
-        else:
-            print(f"[ b]  Back to main menu")
-            print(f"[ h]  Help - Show detailed descriptions")
-            print(f"[ 0]  Exit Android Suite")
-        print("")
-        if COLOR_ENABLED:
-            choice = input(f"{Fore.YELLOW}Select an option [1-30], 'b' to return, or 'h' for help: {Style.RESET_ALL}").strip().lower()
-        else:
-            choice = input(f"Select an option [1-30], 'b' to return, or 'h' for help: ").strip().lower()
-
+        print_menu()
+        choice = get_input("Select an option [1-30], 'b' to return, or 'h' for help: ").lower()
+        
+        # Handle special commands
         if choice in ("h", "help"):
-            if COLOR_ENABLED:
-                print(f"{Fore.GREEN}{help_text}{Style.RESET_ALL}")
-                input(f"{Fore.YELLOW}Press Enter to return to the menu...{Style.RESET_ALL}")
-            else:
-                print(help_text)
-                input("Press Enter to return to the menu...")
+            print_success(help_text)
+            pause("Press Enter to return to the menu...")
             continue
+        
         if choice == "b":
             continue
+        
         if choice == '0':
             print("Exiting.")
             sys.exit(0)
+        
+        # Validate numeric choice
         if not (choice.isdigit() and 1 <= int(choice) <= len(MENU_OPTIONS)):
-            color_red = Fore.RED if COLOR_ENABLED else ''
-            color_yellow = Fore.YELLOW if COLOR_ENABLED else ''
-            color_reset = Style.RESET_ALL if COLOR_ENABLED else ''
-            print(f"{color_red}Invalid option. Please select a valid option (1-{len(MENU_OPTIONS)}), 'b', or 'h'.{color_reset}")
-            input(f"{color_yellow}Press Enter to continue...{color_reset}")
+            print_error(f"Invalid option. Please select a valid option (1-{len(MENU_OPTIONS)}), 'b', or 'h'.")
+            pause()
             continue
-        # Convert to int for option handling
+        
+        # Execute handler
         choice_num = int(choice)
         try:
-            if choice_num == 1:
-                print(f"\n{color_yellow}Android Suite Installer:{color_reset}")
-                print(f"{color_cyan}The installer has been streamlined for better user experience.{color_reset}")
-                print(f"{color_cyan}1.{color_reset} Install all tools (recommended)")
-                print(f"{color_cyan}2.{color_reset} Install emulator only") 
-                print(f"{color_cyan}3.{color_reset} Verify existing installation")
-                print(f"{color_cyan}b.{color_reset} Back to main menu")
-
-                install_choice = input(f"\n{color_yellow}Select installation option [1-3] or 'b' to go back: {color_reset}").strip().lower()
-
-                if install_choice == 'b':
-                    continue
-
-                import subprocess
-                os.makedirs("tools", exist_ok=True)
-
-                print(f"{color_yellow}Starting installation. This may take several minutes...{color_reset}")
-                if install_choice == "1":
-                    subprocess.run([sys.executable, "installer.py", "--all-tools"], check=False)
-                elif install_choice == "2":
-                    subprocess.run([sys.executable, "installer.py", "--emulator"], check=False)
-                elif install_choice == "3":
-                    subprocess.run([sys.executable, "installer.py", "--verify"], check=False)
-                else:
-                    print(f"{color_red}Invalid choice. Returning to main menu...{color_reset}")
-                    continue
-            elif choice_num == 2:
-                print(f"\n{color_yellow}Checking emulator root status...{color_reset}")
-                device_id = input("Enter device ID (optional, will auto-detect): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, device_id=device_id)
-                pentester._setup_adb_connection()
-                is_emulator, has_root, is_writable, message = pentester.check_emulator_root_status()
-                print(f"\n{color_cyan}Emulator Status:{color_reset}")
-                print(message)
-                if is_emulator and has_root and is_writable:
-                    print(f"\n{color_green}✓ Perfect! Emulator is ready for pentesting.{color_reset}")
-                elif is_emulator and has_root:
-                    print(f"\n{color_yellow}! Almost ready. Run 'adb remount' to enable system writes.{color_reset}")
-                elif is_emulator:
-                    print(f"\n{color_yellow}! Root access needed. Start emulator with -writable-system flag.{color_reset}")
-                else:
-                    print(f"\n{color_red}! Physical device detected. Limited pentesting capabilities.{color_reset}")
-            elif choice_num == 3:
-                print(f"\n{color_yellow}Setting up Android Emulator with Play Store + Root...{color_reset}")
-                pentester = AndroidPentester(apk_path=None)
-                pentester._setup_adb_connection()
-                pentester.setup_emulator_with_playstore_and_root()
-            elif choice_num == 4:
-                package = input("Enter package name (e.g. com.example.app): ").strip()
-                valid, err = config.validate_package_name(package)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                device_id = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device_id)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
-                pentester._setup_adb_connection()
-                matches = pentester.get_pid_for_package(package)
-                if matches:
-                    for pid, proc_name in matches:
-                        print(f"{color_green}PID for {package}: {pid} (process: {proc_name}){color_reset}")
-                else:
-                    print(f"{color_yellow}No running process found for package: {package}{color_reset}")
-            elif choice_num == 5:
-                apk_path = input("Enter APK file path to install: ").strip()
-                valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                device_id = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device_id)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                pentester = AndroidPentester(apk_path=apk_path, app_name=None, device_id=device_id)
-                pentester._setup_adb_connection()
-                result = pentester.adb_install_apk(apk_path, device_id=device_id)
-                print(f"{color_green if result else color_red}Install result: {'Success' if result else 'Failed'}{color_reset}")
-            elif choice_num == 6:
-                package = input("Enter package name to uninstall: ").strip()
-                valid, err = config.validate_package_name(package)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                device_id = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device_id)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
-                pentester._setup_adb_connection()
-                result = pentester.adb_uninstall_apk(package, device_id=device_id)
-                print(f"{color_green if result else color_red}Uninstall result: {'Success' if result else 'Failed'}{color_reset}")
-            elif choice_num == 7:
-                local_path = input("Enter local file path to push: ").strip()
-                valid, err = config.validate_file_path(local_path, must_exist=True)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                remote_path = input("Enter remote path on device: ").strip()
-                valid, err = config.validate_remote_path(remote_path)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                device_id = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device_id)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device_id)
-                pentester._setup_adb_connection()
-                result = pentester.adb_push_file(local_path, remote_path, device_id=device_id)
-                print(f"{color_green if result else color_red}Push result: {'Success' if result else 'Failed'}{color_reset}")
-            elif choice_num == 8:
-                remote_path = input("Enter remote file path on device to pull: ").strip()
-                valid, err = config.validate_remote_path(remote_path)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                local_path = input("Enter local destination path: ").strip()
-                valid, err = config.validate_file_path(local_path, must_exist=False)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                device_id = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device_id)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device_id)
-                pentester._setup_adb_connection()
-                result = pentester.adb_pull_file(remote_path, local_path, device_id=device_id)
-                print(f"{color_green if result else color_red}Pull result: {'Success' if result else 'Failed'}{color_reset}")
-            elif choice_num == 9:
-                device = input("Enter device ID (optional): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device)
-                pentester._setup_adb_connection()
-                info = pentester._collect_device_info()
-                if not info:
-                    print(f"{color_red}No device information could be collected.{color_reset}")
-                else:
-                    print(f"{color_green}Device info:{color_reset}")
-                    for k, v in info.items():
-                        print(f"{color_cyan}{k}: {color_white}{v}{color_reset}")
-            elif choice_num == 10:
-                # Setup Frida server with interactive version selection
-                device = input("Enter device ID (optional): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device)
-                
-                if not pentester._setup_adb_connection():
-                    print(f"{color_red}Failed to connect to Android device. Please check device connection.{color_reset}")
-                    continue
-                
-                result = pentester.setup_frida_server_interactive()
-                if result:
-                    print(f"{color_green}✅ Frida server setup completed successfully!{color_reset}")
-                else:
-                    print(f"{color_red}❌ Frida server setup failed.{color_reset}")
-                    print(f"{color_yellow}💡 Tips for troubleshooting:{color_reset}")
-                    print("   • Ensure device is rooted or use an emulator")
-                    print("   • Check internet connection for downloading Frida server")
-                    print("   • Verify device architecture compatibility")
-                    print("   • Try a different Frida version")
-            elif choice_num == 11:
-                # Stop Frida server on device
-                device = input("Enter device ID (optional): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device)
-                pentester._setup_adb_connection()
-                pentester.menu_stop_frida_server()
-            elif choice_num == 12:
-                device = input("Enter device ID (optional): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device)
-                pentester._setup_adb_connection()
-                procs = pentester.get_process_list()
-                if not procs:
-                    print(f"{color_yellow}No running processes found.{color_reset}")
-                else:
-                    for proc in procs:
-                        print(f"{color_green}PID: {proc['pid']}, Name: {proc['name']}{color_reset}")
-            elif choice_num == 13:
-                # View/Save Logcat Output
-                device = input("Enter device ID (optional): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device)
-                pentester._setup_adb_connection()
-                filter_tag = input("Enter logcat filter tag (optional): ").strip() or None
-                lines_input = input("How many log lines to fetch? [default 200]: ").strip()
-                valid, lines, err = config.validate_integer(lines_input, min_val=1, max_val=10000, default=200)
-                if not valid:
-                    print(f"{color_yellow}[!] {err}, using default 200{color_reset}")
-                    lines = 200
-                save_path = input("Enter file path to save logcat output (leave blank to use ./output/logcat.txt or print to screen): ").strip() or None
-                if save_path is None:
-                    os.makedirs("output", exist_ok=True)
-                    save_path = "output/logcat.txt"
-                pentester.get_logcat(filter_tag=filter_tag, save_to_file=save_path, lines=lines)
-                print(f"{color_green}Logcat output saved to {save_path}{color_reset}")
-            elif choice_num == 14:
-                # List installed packages
-                device_id = input("Enter device ID (optional): ").strip() or None
-                pentester = AndroidPentester(apk_path=None, app_name=None, device_id=device_id)
-                success, packages, message = pentester.list_installed_packages(device_id=device_id)
-                
-                if success:
-                    print(f"\n{color_green}{message}{color_reset}")
-                    print(f"\n{color_green}Installed packages:{color_reset}")
-                    for i, pkg in enumerate(packages, 1):
-                        print(f"{color_cyan}{i:3d}. {pkg}{color_reset}")
-                else:
-                    print(f"{color_red}{message}{color_reset}")
-            elif choice_num == 15:
-                # Dump app memory with fridump
-                print(f"{color_cyan}[i] Fridump will dump memory from a running app process.{color_reset}")
-                print(f"{color_cyan}[i] Make sure the target app is running on the device.{color_reset}")
-                device = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                name = input("Enter package name (required): ").strip()
-                valid, err = config.validate_package_name(name)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                pentester = AndroidPentester(app_name=name, device_id=device)
-                pentester._setup_adb_connection()
-                pentester._setup_frida_server_optional()
-                output_dir = input("Enter output directory for fridump (leave blank for ./output/fridump): ").strip() or 'output/fridump'
-                os.makedirs(output_dir, exist_ok=True)
-                
-                # Additional options
-                print(f"{color_cyan}[i] Fridump options:{color_reset}")
-                strings_mode = config.validate_yes_no(input("Extract strings from memory dumps? (y/N): ").strip())
-                read_only = config.validate_yes_no(input("Include read-only memory regions? (y/N): ").strip())
-                
-                print(f"{color_cyan}[i] Running fridump on package: {name}{color_reset}")
-                success, message = pentester.run_fridump(output_dir=output_dir, strings_mode=strings_mode, read_only=read_only)
-                if success:
-                    print(f"{color_green}{message}{color_reset}")
-                else:
-                    print(f"{color_red}{message}{color_reset}")
-                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-            elif choice_num == 16:
-                # APKTool and JADX decompile APK
-                apk = input("Enter APK file path to decompile: ").strip()
-                valid, err = config.validate_file_path(apk, must_exist=True, file_type='.apk')
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                output_dir = input("Enter output directory for decompilation [leave blank for ./output/decompiled]: ").strip() or 'output/decompiled'
-                os.makedirs(output_dir, exist_ok=True)
-                # Create pentester instance for APKTool
-                pentester = AndroidPentester(apk_path=apk, app_name=None, device_id=None)
-                # APKTool decompilation
-                print(f"{color_yellow}Running APKTool...{color_reset}")
-                apktool_success, stdout, stderr, message = pentester.run_apktool(apk, output_dir=output_dir)
-                if apktool_success:
-                    print(f"{color_green}APKTool decompilation complete. Output in {output_dir}{color_reset}")
-                else:
-                    print(f"{color_red}APKTool decompilation failed.{color_reset}")
-                # JADX decompilation (delegated to android_pentest)
-                jadx_dir = os.path.join(output_dir, "jadx")
-                print(f"{color_yellow}Running JADX...{color_reset}")
-                success, stdout, stderr, message = pentester.run_jadx_decompile(apk, output_dir=jadx_dir)
-                if success:
-                    print(f"{color_green}{message}{color_reset}")
-                else:
-                    print(f"{color_red}{message}{color_reset}")
-                    if stderr:
-                        print(f"{color_red}{stderr}{color_reset}")
-            elif choice_num == 17:
-                # Run APKLeaks on APK
-                apk = input("Enter APK file path to scan: ").strip()
-                valid, err = config.validate_file_path(apk, must_exist=True, file_type='.apk')
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                output_path = input("Enter output file for apkleaks [leave blank for ./output/apkleaks/report.txt]: ").strip() or 'output/apkleaks/report.txt'
-                # If user enters a directory, append report.txt
-                if output_path.endswith(os.sep) or (not os.path.splitext(output_path)[1]):
-                    output_path = os.path.join(output_path, 'report.txt')
-                output_dir = os.path.dirname(output_path)
-                os.makedirs(output_dir, exist_ok=True)
-                import subprocess
-                cmd = ["apkleaks", "-f", apk, "-o", output_path]
-                try:
-                    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                    print(f"{color_green}APKLeaks scan complete. Output in {output_path}{color_reset}")
-                    if result.stdout:
-                        print(f"{color_cyan}--- APKLeaks STDOUT ---{color_reset}\n{result.stdout}")
-                    if result.stderr:
-                        print(f"{color_yellow}--- APKLeaks STDERR ---{color_reset}\n{result.stderr}")
-                except subprocess.CalledProcessError as e:
-                    print(f"{color_red}APKLeaks scan failed: {e}{color_reset}")
-                    if e.stdout:
-                        print(f"{color_cyan}--- APKLeaks STDOUT ---{color_reset}\n{e.stdout}")
-                    if e.stderr:
-                        print(f"{color_yellow}--- APKLeaks STDERR ---{color_reset}\n{e.stderr}")
-            elif choice_num == 18:
-                # Extract app data directory
-                package = input("Enter package name to extract data for: ").strip()
-                valid, err = config.validate_package_name(package)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                device_id = input("Enter device ID (optional): ").strip() or None
-                valid, err = config.validate_device_id(device_id)
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                dest_dir = input("Enter local destination directory (leave blank for ./output/appdata): ").strip() or "output/appdata"
-                use_compression = config.validate_yes_no(input("Use compression for large data? (y/N): ").strip())
-                os.makedirs(dest_dir, exist_ok=True)
-                pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
-                pentester._setup_adb_connection()
-                result, message = pentester.extract_app_data_directory(package, dest_dir, device_id=device_id, use_compression=use_compression)
-                color = color_green if result else color_red
-                print(f"{color}{message}{color_reset}")
-
-            elif choice_num == 19:
-                # Run apk-components-inspector on APK
-                apk = input("Enter APK file path to analyze: ").strip()
-                valid, err = config.validate_file_path(apk, must_exist=True, file_type='.apk')
-                if not valid:
-                    print(f"{color_red}[!] {err}{color_reset}")
-                    continue
-                print(f"{color_yellow}Running apk-components-inspector...{color_reset}")
-                pentester = AndroidPentester(apk_path=apk, app_name=None, device_id=None)
-                success, stdout, stderr, message = pentester.run_apk_components_inspector(apk)
-                # Always print both stdout and stderr, even if empty, with clear labels
-                print(f"{color_cyan}--- apk-components-inspector STDOUT ---{color_reset}")
-                print(stdout if stdout else f"{color_yellow}[No stdout output]{color_reset}")
-                print(f"{color_cyan}--- apk-components-inspector STDERR ---{color_reset}")
-                print(stderr if stderr else f"{color_yellow}[No stderr output]{color_reset}")
-                # Print message and success/failure
-                if success:
-                    print(f"{color_green}{message}{color_reset}")
-                else:
-                    print(f"{color_red}{message}{color_reset}")
-
-            elif choice_num == 20:
-                # Run frida-script-gen
-                apk_path = input("Enter APK file path (required): ").strip()
-                if not apk_path or not os.path.exists(apk_path):
-                    print(f"{color_red}[!] APK file not found.{color_reset}")
-                    continue
-                output_file = input("Enter output file for frida-script-gen (leave blank if not needed): ").strip() or None
-                extra_args = input("Enter any extra arguments for frida-script-gen (space separated, leave blank if none): ").strip()
-                extra_args_list = extra_args.split() if extra_args else None
-                print(f"{color_yellow}Running frida-script-gen...{color_reset}")
-                pentester = AndroidPentester(apk_path=apk_path, app_name=None, device_id=None)
-                success, stdout, stderr, message = pentester.run_frida_script_gen(apk_path, output_file, extra_args_list)
-                if success:
-                    if stdout:
-                        print(f"{color_green}{stdout}{color_reset}")
-                    print(f"{color_green}{message}{color_reset}")
-                else:
-                    print(f"{color_red}{message}{color_reset}")
-                    if stderr:
-                        print(f"{color_red}{stderr}{color_reset}")
-            elif choice_num == 21:
-                # Run MobApp-Storage-Inspector GUI using AndroidPentester class
-                print(f"{color_yellow}Launching MobApp-Storage-Inspector GUI...{color_reset}")
-                print(f"{color_cyan}Note: This is a GUI application that will run independently.{color_reset}")
-                print(f"{color_cyan}You can continue using this tool while the GUI runs in the background.{color_reset}")
-                
-                pentester = AndroidPentester(apk_path=None)
-                success, stdout, stderr, message = pentester.run_mobapp_storage_inspector()
-                
-                if success:
-                    print(f"{color_green}{message}{color_reset}")
-                    print(f"{color_green}💡 The GUI should now be open. You can analyze APKs using the interface.{color_reset}")
-                    print(f"{color_yellow}💡 To close the GUI, use the application's exit button or close the window.{color_reset}")
-                else:
-                    print(f"{color_red}{message}{color_reset}")
-                    if stderr:
-                        print(f"{color_red}{stderr}{color_reset}")
-                    print(f"{color_yellow}💡 If Java issues persist, ensure Java 17+ is installed from: https://adoptium.net/{color_reset}")
-            elif choice_num == 22:
-                # Setup Burp Suite CA certificate
-                print(f"{color_yellow}Setting up Burp Suite CA certificate...{color_reset}")
-                device_id = input("Enter device ID (optional, will auto-detect): ").strip() or None
-                cert_path = input("Enter path to Burp certificate (DER format, optional - will guide if not provided): ").strip() or None
-                
-                pentester = AndroidPentester(apk_path=None, device_id=device_id)
-                pentester._setup_adb_connection()
-                
-                success = pentester.setup_burp_certificate(burp_cert_path=cert_path, device_id=device_id)
-                
-                if success:
-                    print(f"{color_green}[+] Burp certificate setup completed successfully!{color_reset}")
-                    print(f"{color_cyan}[*] Configure your device proxy settings to use Burp Suite for traffic interception.{color_reset}")
-                else:
-                    print(f"{color_red}[!] Burp certificate setup failed. Check the output above for details.{color_reset}")
-                    
-            elif choice_num == 23:
-                # Objection Testing Suite
-                print(f"{color_yellow}Starting Objection Testing Suite...{color_reset}")
-                
-                # Get target information
-                print(f"{color_cyan}Target Selection:{color_reset}")
-                print(f"{color_cyan}1.{color_reset} Package name (e.g., com.example.app)")
-                print(f"{color_cyan}2.{color_reset} Process ID (PID)")
-                print(f"{color_cyan}b.{color_reset} Back to main menu")
-                
-                target_choice = input(f"\n{color_yellow}Select target type [1-2] or 'b' to go back: {color_reset}").strip().lower()
-                
-                if target_choice == 'b':
-                    continue
-                
-                package_name = None
-                process_id = None
-                
-                if target_choice == "1":
-                    package_name = input("Enter package name (e.g., com.example.app): ").strip()
-                    if not package_name:
-                        print(f"{color_red}[!] No package name entered.{color_reset}")
-                        continue
-                elif target_choice == "2":
-                    try:
-                        process_id = int(input("Enter process ID (PID): ").strip())
-                    except ValueError:
-                        print(f"{color_red}[!] Invalid PID entered.{color_reset}")
-                        continue
-                else:
-                    print(f"{color_red}[!] Invalid choice.{color_reset}")
-                    continue
-                
-                device_id = input("Enter device ID (optional, will auto-detect): ").strip() or None
-                
-                # Import and initialize Objection module
-                try:
-                    from objection_module import ObjectionTester
-                    
-                    objection_tester = ObjectionTester(
-                        package_name=package_name,
-                        process_id=process_id,
-                        device_id=device_id
-                    )
-                    
-                    # Check if Objection is available
-                    available, message = objection_tester.check_objection_available()
-                    if not available:
-                        print(f"{color_red}[!] Objection not available: {message}{color_reset}")
-                        continue
-                        
-                    # Verify target is running
-                    if package_name or process_id:
-                        running, message = objection_tester.verify_target_running()
-                        if not running:
-                            print(f"{color_red}[!] Target not running: {message}{color_reset}")
-                            response = input("Continue anyway? (y/N): ").strip().lower()
-                            if response != 'y':
-                                continue
-                    
-                    # Run Objection menu system
-                    objection_menu_running = True
-                    while objection_menu_running:
-                        objection_tester.display_main_menu()
-                        
-                        try:
-                            obj_choice = input(f"{color_yellow}Select an option [1-9] or 'b' to return: {color_reset}").strip().lower()
-                            
-                            if obj_choice == 'b':
-                                objection_menu_running = False
-                                continue
-                                
-                            if not obj_choice.isdigit() or not (1 <= int(obj_choice) <= 9):
-                                print(f"{color_red}Invalid option. Please select 1-9 or 'b'.{color_reset}")
-                                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                continue
-                                
-                            obj_choice_num = int(obj_choice)
-                            
-                            if obj_choice_num == 1:
-                                # Security Bypasses
-                                bypass_menu_running = True
-                                while bypass_menu_running:
-                                    objection_tester.display_security_bypasses_menu()
-                                    bypass_choice = input(f"{color_yellow}Select bypass option [1-5] or 'b': {color_reset}").strip().lower()
-                                    
-                                    if bypass_choice == 'b':
-                                        bypass_menu_running = False
-                                        continue
-                                        
-                                    if bypass_choice == '1':
-                                        success, output_file, stdout, stderr = objection_tester.run_root_detection_bypass()
-                                        print(f"{color_green if success else color_red}Root detection bypass {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif bypass_choice == '2':
-                                        success, output_file, stdout, stderr = objection_tester.run_ssl_pinning_bypass()
-                                        print(f"{color_green if success else color_red}SSL pinning bypass {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif bypass_choice == '3':
-                                        success, output_file, stdout, stderr = objection_tester.run_anti_debugging_bypass()
-                                        print(f"{color_green if success else color_red}Anti-debugging bypass {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif bypass_choice == '4':
-                                        success, output_file, stdout, stderr = objection_tester.run_biometric_bypass()
-                                        print(f"{color_green if success else color_red}Biometric bypass {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif bypass_choice == '5':
-                                        results = objection_tester.run_all_security_bypasses()
-                                        summary = objection_tester.get_test_summary(results)
-                                        print(f"{color_cyan}{summary}{color_reset}")
-                                    else:
-                                        print(f"{color_red}Invalid option.{color_reset}")
-                                        
-                                    if bypass_choice != 'b':
-                                        input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                        
-                            elif obj_choice_num == 2:
-                                # Data Exploration
-                                data_menu_running = True
-                                while data_menu_running:
-                                    objection_tester.display_data_exploration_menu()
-                                    data_choice = input(f"{color_yellow}Select data exploration option [1-5] or 'b': {color_reset}").strip().lower()
-                                    
-                                    if data_choice == 'b':
-                                        data_menu_running = False
-                                        continue
-                                        
-                                    if data_choice == '1':
-                                        success, output_file, stdout, stderr = objection_tester.run_filesystem_scan()
-                                        print(f"{color_green if success else color_red}Filesystem scan {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif data_choice == '2':
-                                        success, output_file, stdout, stderr = objection_tester.run_database_analysis()
-                                        print(f"{color_green if success else color_red}Database analysis {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif data_choice == '3':
-                                        success, output_file, stdout, stderr = objection_tester.run_shared_preferences_scan()
-                                        print(f"{color_green if success else color_red}Shared preferences scan {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif data_choice == '4':
-                                        success, output_file, stdout, stderr = objection_tester.run_keystore_analysis()
-                                        print(f"{color_green if success else color_red}Keystore analysis {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif data_choice == '5':
-                                        results = objection_tester.run_data_leakage_check()
-                                        summary = objection_tester.get_test_summary(results)
-                                        print(f"{color_cyan}{summary}{color_reset}")
-                                    else:
-                                        print(f"{color_red}Invalid option.{color_reset}")
-                                        
-                                    if data_choice != 'b':
-                                        input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                        
-                            elif obj_choice_num == 3:
-                                # Runtime Analysis
-                                runtime_menu_running = True
-                                while runtime_menu_running:
-                                    objection_tester.display_runtime_analysis_menu()
-                                    runtime_choice = input(f"{color_yellow}Select runtime analysis option [1-4] or 'b': {color_reset}").strip().lower()
-                                    
-                                    if runtime_choice == 'b':
-                                        runtime_menu_running = False
-                                        continue
-                                        
-                                    if runtime_choice == '1':
-                                        success, output_file, stdout, stderr = objection_tester.run_class_enumeration()
-                                        print(f"{color_green if success else color_red}Class enumeration {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif runtime_choice == '2':
-                                        class_name = input("Enter class name (optional, leave blank for all): ").strip() or None
-                                        success, output_file, stdout, stderr = objection_tester.run_method_enumeration(class_name)
-                                        print(f"{color_green if success else color_red}Method enumeration {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif runtime_choice == '3':
-                                        success, output_file, stdout, stderr = objection_tester.run_intent_monitoring()
-                                        print(f"{color_green if success else color_red}Intent monitoring {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif runtime_choice == '4':
-                                        success, output_file, stdout, stderr = objection_tester.run_memory_analysis()
-                                        print(f"{color_green if success else color_red}Memory analysis {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    else:
-                                        print(f"{color_red}Invalid option.{color_reset}")
-                                        
-                                    if runtime_choice != 'b':
-                                        input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                        
-                            elif obj_choice_num == 4:
-                                # Network Monitoring
-                                print(f"{color_yellow}Starting HTTP monitoring...{color_reset}")
-                                success, output_file, stdout, stderr = objection_tester.run_http_monitoring()
-                                print(f"{color_green if success else color_red}HTTP monitoring {'started' if success else 'failed'}: {output_file}{color_reset}")
-                                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                
-                            elif obj_choice_num == 5:
-                                # Application Information
-                                print(f"{color_yellow}Getting application information...{color_reset}")
-                                tests = [
-                                    ("Activities", objection_tester.run_activities_enumeration),
-                                    ("Services", objection_tester.run_services_enumeration),
-                                    ("Permissions", objection_tester.run_permissions_analysis),
-                                    ("Package Info", objection_tester.run_package_info)
-                                ]
-                                
-                                results = []
-                                for name, func in tests:
-                                    print(f"  [*] Getting {name}...")
-                                    success, output_file, stdout, stderr = func()
-                                    results.append((name, success, output_file))
-                                    
-                                summary = objection_tester.get_test_summary(results)
-                                print(f"{color_cyan}{summary}{color_reset}")
-                                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                
-                            elif obj_choice_num == 6:
-                                print(f"{color_yellow}Dynamic manipulation features coming soon...{color_reset}")
-                                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                
-                            elif obj_choice_num == 7:
-                                print(f"{color_yellow}Advanced testing features coming soon...{color_reset}")
-                                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                
-                            elif obj_choice_num == 8:
-                                # Quick Common Tests
-                                quick_menu_running = True
-                                while quick_menu_running:
-                                    objection_tester.display_quick_tests_menu()
-                                    quick_choice = input(f"{color_yellow}Select quick test option [1-4] or 'b': {color_reset}").strip().lower()
-                                    
-                                    if quick_choice == 'b':
-                                        quick_menu_running = False
-                                        continue
-                                        
-                                    if quick_choice == '1':
-                                        results = objection_tester.run_basic_security_assessment()
-                                        summary = objection_tester.get_test_summary(results)
-                                        print(f"{color_cyan}{summary}{color_reset}")
-                                    elif quick_choice == '2':
-                                        results = objection_tester.run_data_leakage_check()
-                                        summary = objection_tester.get_test_summary(results)
-                                        print(f"{color_cyan}{summary}{color_reset}")
-                                    elif quick_choice == '3':
-                                        success, output_file, stdout, stderr = objection_tester._execute_objection_command("env", "quick_tests", "environment_info", "Get environment information")
-                                        print(f"{color_green if success else color_red}Environment info {'completed' if success else 'failed'}: {output_file}{color_reset}")
-                                    elif quick_choice == '4':
-                                        print(f"{color_yellow}Running complete package analysis...{color_reset}")
-                                        all_tests = [
-                                            objection_tester.run_basic_security_assessment(),
-                                            objection_tester.run_data_leakage_check()
-                                        ]
-                                        all_results = []
-                                        for test_results in all_tests:
-                                            all_results.extend(test_results)
-                                        summary = objection_tester.get_test_summary(all_results)
-                                        print(f"{color_cyan}{summary}{color_reset}")
-                                    else:
-                                        print(f"{color_red}Invalid option.{color_reset}")
-                                        
-                                    if quick_choice != 'b':
-                                        input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                        
-                            elif obj_choice_num == 9:
-                                # Verify Target & Setup
-                                print(f"{color_yellow}Verifying target and setup...{color_reset}")
-                                
-                                available, message = objection_tester.check_objection_available()
-                                print(f"Objection Status: {color_green if available else color_red}{message}{color_reset}")
-                                
-                                if package_name or process_id:
-                                    running, message = objection_tester.verify_target_running()
-                                    print(f"Target Status: {color_green if running else color_red}{message}{color_reset}")
-                                    
-                                print(f"Output Directory: {color_cyan}{objection_tester.app_output_dir}{color_reset}")
-                                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                                
-                        except Exception as e:
-                            print(f"{color_red}Error in Objection menu: {str(e)}{color_reset}")
-                            input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                    
-                except ImportError:
-                    print(f"{color_red}[!] Could not import objection_module. Make sure objection_module.py exists.{color_reset}")
-                except Exception as e:
-                    print(f"{color_red}[!] Error initializing Objection tester: {str(e)}{color_reset}")
-                    
-
-
-            elif choice_num == 24:
-                # New option: Create/Launch AVD with Magisk+Xposed
-                print(f"\n{color_yellow}Launching AVD with Magisk and Xposed (root, writable system)...{color_reset}")
-                try:
-                    import avd_magisk_xposed
-                    avd_magisk_xposed.create_avd_with_magisk_xposed()
-                    print(f"{color_green}AVD launch script executed. Check emulator window for progress.{color_reset}")
-                except Exception as e:
-                    print(f"{color_red}Error running avd_magisk_xposed: {e}{color_reset}")
-                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-
-            elif choice_num == 25:
-                # Sensitive Strings/Secrets Finder
-                print(f"\n{color_yellow}Sensitive Strings/Secrets Finder{color_reset}")
-                apk_path = input("Enter APK path (or leave blank to use last set path): ").strip() or None
-                pentester = AndroidPentester(apk_path=apk_path)
-                pentester._setup_adb_connection()
-                results = pentester.find_sensitive_strings()
-                if results:
-                    print(f"{color_green}Sensitive strings/secrets found:{color_reset}")
-                    for r in results:
-                        print(f"{color_cyan}{r}{color_reset}")
-                else:
-                    print(f"{color_yellow}No sensitive strings or secrets found.{color_reset}")
-                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-
-            elif choice_num == 26:
-                # Automated Backup/Restore
-                print(f"\n{color_yellow}Automated Backup/Restore{color_reset}")
-                package = input("Enter package name to backup/restore: ").strip()
-                pentester = AndroidPentester(apk_path=None)
-                pentester._setup_adb_connection()
-                print(f"{color_cyan}1.{color_reset} Backup app data\n{color_cyan}2.{color_reset} Restore app data\n{color_cyan}b.{color_reset} Back to main menu")
-                br_choice = input("Select option [1-2] or 'b': ").strip().lower()
-                if br_choice == '1':
-                    backup_path = input("Enter backup output path (default: ./output/backup.ab): ").strip() or "./output/backup.ab"
-                    pentester.adb_backup_app(package, backup_path)
-                elif br_choice == '2':
-                    backup_path = input("Enter backup file path to restore: ").strip()
-                    pentester.adb_restore_app(package, backup_path)
-                elif br_choice == 'b':
-                    pass
-                else:
-                    print(f"{color_red}Invalid choice.{color_reset}")
-                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-
-            elif choice_num == 27:
-                # App Repackaging Utility
-                print(f"\n{color_yellow}App Repackaging Utility{color_reset}")
-                apk_path = input("Enter APK path to repackage: ").strip()
-                output_path = input("Enter output path for repackaged APK (default: ./output/repackaged.apk): ").strip() or "./output/repackaged.apk"
-                pentester = AndroidPentester(apk_path=apk_path)
-                pentester.repackage_apk(output_path)
-                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-
-            elif choice_num == 28:
-                # Automated Uninstall/Cleaner
-                print(f"\n{color_yellow}Automated Uninstall/Cleaner{color_reset}")
-                package = input("Enter package name to uninstall and clean: ").strip()
-                pentester = AndroidPentester(apk_path=None)
-                pentester._setup_adb_connection()
-                pentester.uninstall_app_and_clean(package)
-                input(f"{color_yellow}Press Enter to continue...{color_reset}")
-
-            elif choice_num == 29:
-                # Deep Link Security Tester
-                print(f"\n{color_yellow}Deep Link Security Tester{color_reset}")
-                print(f"{color_cyan}Based on HackTricks, Oversecured & 8ksec Research{color_reset}")
-                print(f"\n{color_white}This tool tests deep links for:{color_reset}")
-                print(f"  • Open Redirect vulnerabilities")
-                print(f"  • XSS/JavaScript Injection")
-                print(f"  • Path Traversal attacks")
-                print(f"  • SQL Injection")
-                print(f"  • Authentication Bypass")
-                print(f"  • Intent Injection (component hijacking)")
-                print(f"  • File/Content Provider access")
-                
-                print(f"\n{color_cyan}Select Mode:{color_reset}")
-                print(f"  {color_green}1.{color_reset} Full Test (requires device/emulator)")
-                print(f"  {color_green}2.{color_reset} Offline Analysis (no device needed)")
-                print(f"  {color_green}b.{color_reset} Back to main menu")
-                
-                mode_choice = input(f"\n{color_yellow}Select mode [1-2] or 'b': {color_reset}").strip().lower()
-                
-                if mode_choice == 'b':
-                    continue
-                
-                offline_mode = (mode_choice == '2')
-                
-                if offline_mode:
-                    print(f"\n{color_cyan}[OFFLINE MODE] Extract & analyze deep links without device{color_reset}")
-                else:
-                    print(f"\n{color_cyan}[FULL TEST MODE] Will execute tests on connected device{color_reset}")
-                
-                print(f"\n{color_cyan}Input options:{color_reset}")
-                print(f"  1. APK file path (will extract manifest)")
-                print(f"  2. Decompiled manifest path")
-                print(f"  3. Both APK and manifest")
-                
-                apk_path = input(f"\n{color_yellow}Enter APK path (or press Enter to skip): {color_reset}").strip() or None
-                if apk_path:
-                    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-                    if not valid:
-                        print(f"{color_red}[!] {err}{color_reset}")
-                        apk_path = None
-                
-                manifest_path = input(f"{color_yellow}Enter AndroidManifest.xml path (or press Enter to auto-detect): {color_reset}").strip() or None
-                if manifest_path:
-                    valid, err = config.validate_file_path(manifest_path, must_exist=True)
-                    if not valid:
-                        print(f"{color_red}[!] {err}{color_reset}")
-                        manifest_path = None
-                
-                package_name = input(f"{color_yellow}Enter package name (optional, for intent tests): {color_reset}").strip() or None
-                if package_name:
-                    valid, err = config.validate_package_name(package_name)
-                    if not valid:
-                        print(f"{color_yellow}[*] Warning: {err}{color_reset}")
-                
-                if not apk_path and not manifest_path:
-                    print(f"{color_red}[!] Please provide either an APK path or manifest path{color_reset}")
-                    input(f"{color_yellow}Press Enter to continue...{color_reset}")
-                    continue
-                
-                pentester = AndroidPentester(apk_path=apk_path)
-                
-                if offline_mode:
-                    print(f"\n{color_green}Starting Offline Deep Link Analysis...{color_reset}")
-                    results = pentester.run_deeplink_offline_analysis(
-                        apk_path=apk_path,
-                        package_name=package_name,
-                        manifest_path=manifest_path
-                    )
-                else:
-                    print(f"\n{color_green}Starting Deep Link Security Test...{color_reset}")
-                    pentester._setup_adb_connection()
-                    results = pentester.run_deeplink_security_test(
-                        apk_path=apk_path,
-                        package_name=package_name,
-                        manifest_path=manifest_path
-                    )
-                    
-                    # Offer to test individual deep links manually
-                    if results.get('deep_links'):
-                        manual_test = input(f"\n{color_yellow}Test a specific deep link manually? (y/n): {color_reset}").strip().lower()
-                        if manual_test == 'y':
-                            print(f"\n{color_cyan}Available deep links:{color_reset}")
-                            for i, link in enumerate(results['deep_links'], 1):
-                                scheme = link.get('scheme', '')
-                                host = link.get('host', '')
-                                path = link.get('path', '')
-                                uri = f"{scheme}://{host}{path}" if host else f"{scheme}://{path}"
-                                print(f"  [{i}] {uri}")
-                            
-                            custom_uri = input(f"\n{color_yellow}Enter custom deep link URI to test: {color_reset}").strip()
-                            if custom_uri:
-                                print(f"[*] Testing: {custom_uri}")
-                                test_result = pentester.execute_deeplink_test(custom_uri)
-                                print(f"[*] Result: {'Success' if test_result['success'] else 'Failed'}")
-                                print(f"[*] Response: {test_result.get('response', 'N/A')[:200]}")
-                                if test_result.get('indicators'):
-                                    print(f"[*] Indicators: {', '.join(test_result['indicators'])}")
-                
-                input(f"\n{color_yellow}Press Enter to continue...{color_reset}")
-
-            elif choice_num == 30:
-                print(f"{color_green}Exiting.{color_reset}")
-                sys.exit(0)
-
+            handler = handlers.get(choice_num)
+            if handler:
+                handler()
         except Exception as e:
-            if COLOR_ENABLED:
-                print(f"{Fore.RED}An error occurred: {e}{Style.RESET_ALL}")
-                input(f"{Fore.YELLOW}Press Enter to continue...{Style.RESET_ALL}")
-            else:
-                print(f"An error occurred: {e}")
-                input("Press Enter to continue...")
+            print_error(f"An error occurred: {e}")
+            pause()
 
-        # Allow exit with '0' as well for user convenience
-        if choice == '0':
-            print("Exiting.")
-            sys.exit(0)
+
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
+if __name__ == "__main__":
+    main()
