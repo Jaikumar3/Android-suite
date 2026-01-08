@@ -11,6 +11,102 @@ import argparse
 from android_pentest import AndroidPentester
 import config  # Import config with validators
 
+# Tab completion support
+try:
+    import readline
+    READLINE_AVAILABLE = True
+except ImportError:
+    try:
+        import pyreadline3 as readline
+        READLINE_AVAILABLE = True
+    except ImportError:
+        READLINE_AVAILABLE = False
+
+
+class PathCompleter:
+    """Tab completion for file paths and common inputs"""
+    
+    def __init__(self):
+        self.matches = []
+        self.completion_type = 'path'  # 'path', 'package', 'menu'
+    
+    def set_type(self, completion_type):
+        self.completion_type = completion_type
+    
+    def complete(self, text, state):
+        if state == 0:
+            if self.completion_type == 'path':
+                self.matches = self._path_complete(text)
+            elif self.completion_type == 'package':
+                self.matches = self._package_complete(text)
+            elif self.completion_type == 'menu':
+                self.matches = self._menu_complete(text)
+            else:
+                self.matches = []
+        
+        try:
+            return self.matches[state]
+        except IndexError:
+            return None
+    
+    def _path_complete(self, text):
+        """Complete file paths"""
+        import glob
+        if not text:
+            text = './'
+        
+        # Handle ~ for home directory
+        if text.startswith('~'):
+            text = os.path.expanduser(text)
+        
+        # Get matches
+        if os.path.isdir(text) and not text.endswith(os.sep):
+            text += os.sep
+        
+        matches = glob.glob(text + '*')
+        
+        # Add trailing slash for directories
+        matches = [m + os.sep if os.path.isdir(m) else m for m in matches]
+        
+        return matches
+    
+    def _package_complete(self, text):
+        """Complete package names (common prefixes)"""
+        common_prefixes = [
+            'com.', 'org.', 'io.', 'net.', 'app.',
+            'com.android.', 'com.google.', 'com.facebook.',
+            'com.example.', 'com.test.'
+        ]
+        return [p for p in common_prefixes if p.startswith(text)]
+    
+    def _menu_complete(self, text):
+        """Complete menu options"""
+        options = [str(i) for i in range(1, 31)] + ['b', 'h', '0']
+        return [o for o in options if o.startswith(text)]
+
+
+def setup_tab_completion():
+    """Initialize tab completion if available"""
+    if not READLINE_AVAILABLE:
+        return None
+    
+    completer = PathCompleter()
+    readline.set_completer(completer.complete)
+    readline.parse_and_bind('tab: complete')
+    
+    # Set completion delimiters
+    readline.set_completer_delims(' \t\n;')
+    
+    return completer
+
+
+def input_with_completion(prompt, completer=None, completion_type='path'):
+    """Input with tab completion support"""
+    if completer:
+        completer.set_type(completion_type)
+    return input(prompt).strip()
+
+
 try:
     from colorama import Fore, Style, init as colorama_init
     colorama_init(autoreset=True)
@@ -56,6 +152,11 @@ MENU_OPTIONS = [
 
 if __name__ == "__main__":
     os.system('cls' if os.name == 'nt' else 'clear')
+    
+    # Initialize tab completion
+    completer = setup_tab_completion()
+    if completer and READLINE_AVAILABLE:
+        print(f"[+] Tab completion enabled for file paths")
     
     # Define color variables at the top level for global use
     color_green = Fore.GREEN if COLOR_ENABLED else ''

@@ -16,6 +16,39 @@ from pathlib import Path
 import zipfile
 import tarfile
 
+
+def download_with_progress(url, filepath, description="Downloading"):
+    """Download file with progress bar"""
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    
+    total_size = int(response.headers.get('content-length', 0))
+    downloaded = 0
+    block_size = 8192
+    
+    # Progress bar settings
+    bar_width = 40
+    
+    with open(filepath, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=block_size):
+            f.write(chunk)
+            downloaded += len(chunk)
+            
+            if total_size > 0:
+                percent = downloaded / total_size
+                filled = int(bar_width * percent)
+                bar = '█' * filled + '░' * (bar_width - filled)
+                mb_down = downloaded / (1024 * 1024)
+                mb_total = total_size / (1024 * 1024)
+                print(f"\r{description}: [{bar}] {percent*100:.1f}% ({mb_down:.1f}/{mb_total:.1f} MB)", end='', flush=True)
+            else:
+                mb_down = downloaded / (1024 * 1024)
+                print(f"\r{description}: {mb_down:.1f} MB downloaded", end='', flush=True)
+    
+    print()  # New line after download
+    return True
+
+
 class AndroidPentestInstaller:
     def print_apktool_usage_hint(self):
         """Check if apktool is in PATH, and if not, print the command to run it from the tools directory."""
@@ -483,17 +516,12 @@ class AndroidPentestInstaller:
                 self.log_status("Could not find JADX download URL", "ERROR")
                 return False
             
-            # Download JADX
+            # Download JADX with progress bar
             filename = f"jadx-{version}.zip"
             filepath = self.tools_dir / filename
             
             self.log_status(f"Downloading JADX {version}...")
-            response = requests.get(download_url, stream=True)
-            response.raise_for_status()
-            
-            with open(filepath, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            download_with_progress(download_url, filepath, f"JADX {version}")
             
             # Extract JADX
             jadx_dir = self.tools_dir / f"jadx-{version}"
@@ -554,15 +582,10 @@ class AndroidPentestInstaller:
                     self.log_status(f"Frida server not found for {arch}", "WARNING")
                     continue
                 
-                # Download
+                # Download with progress bar
                 self.log_status(f"Downloading Frida server for {arch}...")
-                response = requests.get(download_url, stream=True)
-                response.raise_for_status()
-                
                 compressed_file = frida_dir / asset_name
-                with open(compressed_file, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                download_with_progress(download_url, compressed_file, f"Frida {arch}")
                 
                 # Extract
                 import lzma
@@ -1013,25 +1036,13 @@ echo "export PATH=\\"$TOOLS_DIR/jadx-*/bin:\\$PATH\\""
             android_sdk_dir = self.tools_dir / "android-sdk"
             android_sdk_dir.mkdir(exist_ok=True)
             
-            # Download command line tools
+            # Download command line tools with progress bar
             url = download_urls[self.system]
             filename = f"commandlinetools-{self.system}.zip"
             filepath = self.tools_dir / filename
             
             self.log_status(f"Downloading Android SDK Command Line Tools...")
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            
-            with open(filepath, 'wb') as f:
-                total_size = int(response.headers.get('content-length', 0))
-                downloaded = 0
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size > 0:
-                        percent = (downloaded / total_size) * 100
-                        print(f"\rDownloading Android Studio: {percent:.1f}%", end='', flush=True)
-            print()  # New line after download
+            download_with_progress(url, filepath, "Android SDK")
             
             # Extract command line tools
             self.log_status("Extracting command line tools...")
