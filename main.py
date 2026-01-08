@@ -443,22 +443,25 @@ def handle_option_6():
 
 def handle_option_7():
     """Handle: Push file to device"""
-    local_path = get_input("Enter local file path to push: ")
-    valid, err = config.validate_file_path(local_path, must_exist=True)
-    if not valid:
-        print_error(f"[!] {err}")
+    local_path = require_file_path("Enter local file path to push: ", must_exist=True)
+    if not local_path:
         return
     
-    remote_path = get_input("Enter remote path on device: ")
+    remote_path = safe_input("Enter remote path on device: ", allow_empty=False)
+    if not remote_path:
+        print_error("[!] Remote path is required.")
+        return
     valid, err = config.validate_remote_path(remote_path)
     if not valid:
         print_error(f"[!] {err}")
         return
     
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     result = pentester.adb_push_file(local_path, remote_path, device_id=device_id)
     
     if result:
@@ -469,17 +472,26 @@ def handle_option_7():
 
 def handle_option_8():
     """Handle: Pull file from device"""
-    remote_path = get_input("Enter remote file path on device to pull: ")
+    remote_path = safe_input("Enter remote file path on device to pull: ", allow_empty=False)
+    if not remote_path:
+        print_error("[!] Remote path is required.")
+        return
     valid, err = config.validate_remote_path(remote_path)
     if not valid:
         print_error(f"[!] {err}")
         return
     
-    local_path = get_input("Enter local destination path: ")
-    device_id = get_input("Enter device ID (optional): ") or None
+    local_path = safe_input("Enter local destination path: ", allow_empty=False)
+    if not local_path:
+        print_error("[!] Local path is required.")
+        return
+    
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     result = pentester.adb_pull_file(remote_path, local_path, device_id=device_id)
     
     if result:
@@ -490,10 +502,12 @@ def handle_option_8():
 
 def handle_option_9():
     """Handle: Collect device information"""
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     info = pentester._collect_device_info()
     
     if not info:
@@ -506,12 +520,11 @@ def handle_option_9():
 
 def handle_option_10():
     """Handle: Setup Frida server (interactive)"""
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
     
-    if not pentester._setup_adb_connection():
-        print_error("Failed to connect to Android device. Please check device connection.")
+    if not check_device_connection(pentester):
         return
     
     result = pentester.setup_frida_server_interactive()
@@ -528,19 +541,23 @@ def handle_option_10():
 
 def handle_option_11():
     """Handle: Stop Frida server"""
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     pentester.menu_stop_frida_server()
 
 
 def handle_option_12():
     """Handle: Get process list"""
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     procs = pentester.get_process_list()
     
     if not procs:
@@ -552,21 +569,22 @@ def handle_option_12():
 
 def handle_option_13():
     """Handle: View/Save Logcat Output"""
-    device_id = get_input("Enter device ID (optional): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
     
-    filter_tag = get_input("Enter logcat filter tag (optional): ") or None
-    lines_input = get_input("How many log lines to fetch? [default 200]: ")
+    filter_tag = safe_input("Enter logcat filter tag (optional): ", allow_empty=True)
+    lines_input = safe_input("How many log lines to fetch? [default 200]: ", allow_empty=True, default="200")
     
     valid, lines, err = config.validate_integer(lines_input, min_val=1, max_val=10000, default=200)
     if not valid:
         print_warning(f"[!] {err}, using default 200")
         lines = 200
     
-    save_path = get_input("Enter file path to save logcat (leave blank for ./output/logcat.txt): ") or None
-    if save_path is None:
+    save_path = safe_input("Enter file path to save logcat (leave blank for ./output/logcat.txt): ", allow_empty=True)
+    if not save_path:
         os.makedirs("output", exist_ok=True)
         save_path = "output/logcat.txt"
     
@@ -595,24 +613,23 @@ def handle_option_15():
     print_info("[i] Fridump will dump memory from a running app process.")
     print_info("[i] Make sure the target app is running on the device.")
     
-    device_id = get_input("Enter device ID (optional): ") or None
-    package = get_input("Enter package name (required): ")
-    
-    valid, err = config.validate_package_name(package)
-    if not valid:
-        print_error(f"[!] {err}")
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
+    package = require_package_name("Enter package name (required): ")
+    if not package:
         return
     
     pentester = AndroidPentester(app_name=package, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     pentester._setup_frida_server_optional()
     
-    output_dir = get_input("Enter output directory (leave blank for ./output/fridump): ") or 'output/fridump'
+    output_dir = safe_input("Enter output directory (leave blank for ./output/fridump): ", allow_empty=True, default='output/fridump')
     os.makedirs(output_dir, exist_ok=True)
     
     print_info("[i] Fridump options:")
-    strings_mode = config.validate_yes_no(get_input("Extract strings from memory dumps? (y/N): "))
-    read_only = config.validate_yes_no(get_input("Include read-only memory regions? (y/N): "))
+    strings_mode = config.validate_yes_no(safe_input("Extract strings from memory dumps? (y/N): ", allow_empty=True, default='n'))
+    read_only = config.validate_yes_no(safe_input("Include read-only memory regions? (y/N): ", allow_empty=True, default='n'))
     
     print_info(f"[i] Running fridump on package: {package}")
     success, message = pentester.run_fridump(output_dir=output_dir, strings_mode=strings_mode, read_only=read_only)
@@ -627,13 +644,11 @@ def handle_option_15():
 
 def handle_option_16():
     """Handle: APKTool decompile APK"""
-    apk_path = get_input("Enter APK file path to decompile: ")
-    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-    if not valid:
-        print_error(f"[!] {err}")
+    apk_path = require_file_path("Enter APK file path to decompile: ", must_exist=True, file_type='.apk')
+    if not apk_path:
         return
     
-    output_dir = get_input("Enter output directory [leave blank for ./output/decompiled]: ") or 'output/decompiled'
+    output_dir = safe_input("Enter output directory [leave blank for ./output/decompiled]: ", allow_empty=True, default='output/decompiled')
     os.makedirs(output_dir, exist_ok=True)
     
     pentester = AndroidPentester(apk_path=apk_path)
@@ -658,13 +673,11 @@ def handle_option_16():
 
 def handle_option_17():
     """Handle: Run APKLeaks on APK"""
-    apk_path = get_input("Enter APK file path to scan: ")
-    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-    if not valid:
-        print_error(f"[!] {err}")
+    apk_path = require_file_path("Enter APK file path to scan: ", must_exist=True, file_type='.apk')
+    if not apk_path:
         return
     
-    output_path = get_input("Enter output file [leave blank for ./output/apkleaks/report.txt]: ") or 'output/apkleaks/report.txt'
+    output_path = safe_input("Enter output file [leave blank for ./output/apkleaks/report.txt]: ", allow_empty=True, default='output/apkleaks/report.txt')
     if output_path.endswith(os.sep) or not os.path.splitext(output_path)[1]:
         output_path = os.path.join(output_path, 'report.txt')
     
@@ -679,24 +692,26 @@ def handle_option_17():
             print_info(f"--- APKLeaks STDOUT ---\n{result.stdout}")
     except subprocess.CalledProcessError as e:
         print_error(f"APKLeaks scan failed: {e}")
+    except FileNotFoundError:
+        print_error("[!] APKLeaks not found. Install with: pip install apkleaks")
 
 
 def handle_option_18():
     """Handle: Extract app data directory"""
-    package = get_input("Enter package name to extract data for: ")
-    valid, err = config.validate_package_name(package)
-    if not valid:
-        print_error(f"[!] {err}")
+    package = require_package_name("Enter package name to extract data for: ")
+    if not package:
         return
     
-    device_id = get_input("Enter device ID (optional): ") or None
-    dest_dir = get_input("Enter local destination directory (leave blank for ./output/appdata): ") or "output/appdata"
-    use_compression = config.validate_yes_no(get_input("Use compression for large data? (y/N): "))
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
+    dest_dir = safe_input("Enter local destination directory (leave blank for ./output/appdata): ", allow_empty=True, default="output/appdata")
+    use_compression = config.validate_yes_no(safe_input("Use compression for large data? (y/N): ", allow_empty=True, default='n'))
     
     os.makedirs(dest_dir, exist_ok=True)
     
     pentester = AndroidPentester(apk_path=None, app_name=package, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     result, message = pentester.extract_app_data_directory(package, dest_dir, device_id=device_id, use_compression=use_compression)
     
     if result:
@@ -707,10 +722,8 @@ def handle_option_18():
 
 def handle_option_19():
     """Handle: Run apk-components-inspector"""
-    apk_path = get_input("Enter APK file path to analyze: ")
-    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-    if not valid:
-        print_error(f"[!] {err}")
+    apk_path = require_file_path("Enter APK file path to analyze: ", must_exist=True, file_type='.apk')
+    if not apk_path:
         return
     
     print_warning("Running apk-components-inspector...")
@@ -730,13 +743,12 @@ def handle_option_19():
 
 def handle_option_20():
     """Handle: Run frida-script-gen"""
-    apk_path = get_input("Enter APK file path (required): ")
-    if not apk_path or not os.path.exists(apk_path):
-        print_error("[!] APK file not found.")
+    apk_path = require_file_path("Enter APK file path (required): ", must_exist=True, file_type='.apk')
+    if not apk_path:
         return
     
-    output_file = get_input("Enter output file (leave blank if not needed): ") or None
-    extra_args = get_input("Enter extra arguments (space separated, leave blank if none): ")
+    output_file = safe_input("Enter output file (leave blank if not needed): ", allow_empty=True)
+    extra_args = safe_input("Enter extra arguments (space separated, leave blank if none): ", allow_empty=True, default='')
     extra_args_list = extra_args.split() if extra_args else None
     
     print_warning("Running frida-script-gen...")
@@ -756,10 +768,8 @@ def handle_option_20():
 def handle_option_21():
     """Handle: Run MobApp-Storage-Inspector"""
     print_warning("Launching MobApp-Storage-Inspector GUI...")
-    apk_path = get_input("Enter APK file path (required): ")
-    valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
-    if not valid:
-        print_error(f"[!] {err}")
+    apk_path = require_file_path("Enter APK file path (required): ", must_exist=True, file_type='.apk')
+    if not apk_path:
         return
     
     pentester = AndroidPentester(apk_path=apk_path)
@@ -776,11 +786,12 @@ def handle_option_22():
     print_warning("\nBurp Suite CA Certificate Setup")
     print_info("This will install the Burp Suite CA certificate on your device/emulator.")
     
-    device_id = get_input("Enter device ID (optional): ") or None
-    cert_path = get_input("Enter path to Burp CA certificate (leave blank to use default ./tools/burp_cert.pem): ") or None
+    device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
+    cert_path = safe_input("Enter path to Burp CA certificate (leave blank to use default ./tools/burp_cert.pem): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=None, device_id=device_id)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
     
     result = pentester.setup_burp_certificate(cert_path=cert_path, device_id=device_id)
     if result:
@@ -796,13 +807,11 @@ def handle_option_23():
     try:
         from objection_module import ObjectionTester
         
-        package = get_input("Enter package name to test: ")
-        valid, err = config.validate_package_name(package)
-        if not valid:
-            print_error(f"[!] {err}")
+        package = require_package_name("Enter package name to test: ")
+        if not package:
             return
         
-        device_id = get_input("Enter device ID (optional): ") or None
+        device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
         
         objection_tester = ObjectionTester(package_name=package, device_id=device_id)
         objection_tester.run_menu()
@@ -831,10 +840,9 @@ def handle_option_25():
     """Handle: Sensitive Strings/Secrets Finder"""
     print_warning("\nSensitive Strings/Secrets Finder")
     
-    apk_path = get_input("Enter APK path (or leave blank to use last set path): ") or None
+    apk_path = safe_input("Enter APK path (or leave blank to use last set path): ", allow_empty=True)
     
     pentester = AndroidPentester(apk_path=apk_path)
-    pentester._setup_adb_connection()
     
     results = pentester.find_sensitive_strings()
     
@@ -852,23 +860,31 @@ def handle_option_26():
     """Handle: Automated Backup/Restore"""
     print_warning("\nAutomated Backup/Restore")
     
-    package = get_input("Enter package name to backup/restore: ")
+    package = require_package_name("Enter package name to backup/restore: ")
+    if not package:
+        return
     
     pentester = AndroidPentester(apk_path=None)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
     
     print(f"{colors.CYAN}1.{colors.RESET} Backup app data")
     print(f"{colors.CYAN}2.{colors.RESET} Restore app data")
     print(f"{colors.CYAN}b.{colors.RESET} Back to main menu")
     
-    choice = get_input("Select option [1-2] or 'b': ").lower()
+    choice = safe_input("Select option [1-2] or 'b': ", allow_empty=True, default='b')
+    if not choice:
+        return
+    choice = choice.lower()
     
     if choice == '1':
-        backup_path = get_input("Enter backup output path (default: ./output/backup.ab): ") or "./output/backup.ab"
+        backup_path = safe_input("Enter backup output path (default: ./output/backup.ab): ", allow_empty=True, default="./output/backup.ab")
+        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
         pentester.adb_backup_app(package, backup_path)
     elif choice == '2':
-        backup_path = get_input("Enter backup file path to restore: ")
-        pentester.adb_restore_app(package, backup_path)
+        backup_path = require_file_path("Enter backup file path to restore: ", must_exist=True)
+        if backup_path:
+            pentester.adb_restore_app(package, backup_path)
     
     pause()
 
@@ -877,8 +893,12 @@ def handle_option_27():
     """Handle: App Repackaging Utility"""
     print_warning("\nApp Repackaging Utility")
     
-    apk_path = get_input("Enter APK path to repackage: ")
-    output_path = get_input("Enter output path (default: ./output/repackaged.apk): ") or "./output/repackaged.apk"
+    apk_path = require_file_path("Enter APK path to repackage: ", must_exist=True, file_type='.apk')
+    if not apk_path:
+        return
+    
+    output_path = safe_input("Enter output path (default: ./output/repackaged.apk): ", allow_empty=True, default="./output/repackaged.apk")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     pentester = AndroidPentester(apk_path=apk_path)
     pentester.repackage_apk(output_path)
@@ -890,10 +910,14 @@ def handle_option_28():
     """Handle: Automated Uninstall/Cleaner"""
     print_warning("\nAutomated Uninstall/Cleaner")
     
-    package = get_input("Enter package name to uninstall and clean: ")
+    package = require_package_name("Enter package name to uninstall and clean: ")
+    if not package:
+        return
     
     pentester = AndroidPentester(apk_path=None)
-    pentester._setup_adb_connection()
+    if not check_device_connection(pentester):
+        return
+    
     pentester.uninstall_app_and_clean(package)
     
     pause()
@@ -918,7 +942,10 @@ def handle_option_29():
     print(f"  {colors.GREEN}2.{colors.RESET} Offline Analysis (no device needed)")
     print(f"  {colors.GREEN}b.{colors.RESET} Back to main menu")
     
-    mode_choice = get_input("\nSelect mode [1-2] or 'b': ").lower()
+    mode_choice = safe_input("\nSelect mode [1-2] or 'b': ", allow_empty=True, default='b')
+    if not mode_choice:
+        return
+    mode_choice = mode_choice.lower()
     
     if mode_choice == 'b':
         return
@@ -935,21 +962,21 @@ def handle_option_29():
     print("  2. Decompiled manifest path")
     print("  3. Both APK and manifest")
     
-    apk_path = get_input("\nEnter APK path (or press Enter to skip): ") or None
+    apk_path = safe_input("\nEnter APK path (or press Enter to skip): ", allow_empty=True)
     if apk_path:
         valid, err = config.validate_file_path(apk_path, must_exist=True, file_type='.apk')
         if not valid:
             print_error(f"[!] {err}")
             apk_path = None
     
-    manifest_path = get_input("Enter AndroidManifest.xml path (or press Enter to auto-detect): ") or None
+    manifest_path = safe_input("Enter AndroidManifest.xml path (or press Enter to auto-detect): ", allow_empty=True)
     if manifest_path:
         valid, err = config.validate_file_path(manifest_path, must_exist=True)
         if not valid:
             print_error(f"[!] {err}")
             manifest_path = None
     
-    package_name = get_input("Enter package name (optional, for intent tests): ") or None
+    package_name = safe_input("Enter package name (optional, for intent tests): ", allow_empty=True)
     
     if not apk_path and not manifest_path:
         print_error("[!] Please provide either an APK path or manifest path")
@@ -967,7 +994,9 @@ def handle_option_29():
         )
     else:
         print_success("\nStarting Deep Link Security Test...")
-        pentester._setup_adb_connection()
+        if not check_device_connection(pentester):
+            return
+        
         results = pentester.run_deeplink_security_test(
             apk_path=apk_path,
             package_name=package_name,
@@ -976,8 +1005,8 @@ def handle_option_29():
         
         # Offer manual testing
         if results.get('deep_links'):
-            manual_test = get_input("\nTest a specific deep link manually? (y/n): ").lower()
-            if manual_test == 'y':
+            manual_test = safe_input("\nTest a specific deep link manually? (y/n): ", allow_empty=True, default='n')
+            if manual_test and manual_test.lower() == 'y':
                 print_info("\nAvailable deep links:")
                 for i, link in enumerate(results['deep_links'], 1):
                     scheme = link.get('scheme', '')
