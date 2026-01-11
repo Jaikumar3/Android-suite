@@ -213,3 +213,4 @@ tests/__pycache__/
 # IDE/Editor
 .vscode/settings.json
 *.code-workspace
+.session_config.json

@@ -15,6 +15,7 @@ import os
 import argparse
 import subprocess
 import signal
+import json
 
 # Local imports
 from android_pentest import AndroidPentester
@@ -47,7 +48,7 @@ except ImportError:
 # CONSTANTS
 # =============================================================================
 
-VERSION = "2.5.2"
+VERSION = "2.6.0"
 AUTHOR = "Jai"
 
 MENU_OPTIONS = [
@@ -80,8 +81,78 @@ MENU_OPTIONS = [
     ("App Repackaging Utility", "Repackage APKs after modification."),
     ("Automated Uninstall/Cleaner", "Uninstall app and clean up related files."),
     ("Deep Link Security Tester", "Test deep links for security vulnerabilities."),
+    ("AI Security Analyzer", "AI-powered source code analysis for vulnerabilities (Ollama/OpenAI)."),
     ("Exit", "Exit the Android Suite."),
 ]
+
+# =============================================================================
+# SESSION CONFIG (Persistence)
+# =============================================================================
+
+class SessionConfig:
+    """Persist user settings between sessions"""
+    
+    CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session_config.json")
+    
+    # Default values
+    DEFAULTS = {
+        "last_apk_path": "",
+        "last_package_name": "",
+        "last_device_ip": "",
+        "last_output_dir": "",
+        "last_frida_script": "",
+        "auto_connect_device": False,
+        "show_tips": True,
+    }
+    
+    def __init__(self):
+        self._config = self.DEFAULTS.copy()
+        self.load()
+    
+    def load(self):
+        """Load config from file"""
+        try:
+            if os.path.exists(self.CONFIG_FILE):
+                with open(self.CONFIG_FILE, 'r') as f:
+                    saved = json.load(f)
+                    self._config.update(saved)
+        except (json.JSONDecodeError, IOError):
+            pass  # Use defaults on error
+    
+    def save(self):
+        """Save config to file"""
+        try:
+            with open(self.CONFIG_FILE, 'w') as f:
+                json.dump(self._config, f, indent=2)
+        except IOError:
+            pass  # Silently fail
+    
+    def get(self, key, default=None):
+        """Get config value"""
+        return self._config.get(key, default)
+    
+    def set(self, key, value):
+        """Set config value and auto-save"""
+        if value:  # Only save non-empty values
+            self._config[key] = value
+            self.save()
+    
+    def get_with_default(self, key, prompt_text=""):
+        """Get value showing last used as default"""
+        last = self._config.get(key, "")
+        if last:
+            return f"{prompt_text} [{last}]: "
+        return f"{prompt_text}: "
+    
+    def clear(self):
+        """Reset all config to defaults"""
+        self._config = self.DEFAULTS.copy()
+        self.save()
+
+
+# Global session config
+session_config = SessionConfig()
+
 
 # =============================================================================
 # COLOR HELPERS
@@ -292,9 +363,15 @@ def check_device_connection(pentester):
         return False
 
 
-def require_package_name(prompt="Enter package name: "):
-    """Get and validate package name from user"""
-    package = safe_input(prompt, allow_empty=False)
+def require_package_name(prompt="Enter package name", config_key="last_package_name"):
+    """Get and validate package name from user with persistence"""
+    last_value = session_config.get(config_key, "")
+    if last_value:
+        display_prompt = f"{prompt} [{last_value}]: "
+    else:
+        display_prompt = f"{prompt}: "
+    
+    package = safe_input(display_prompt, allow_empty=bool(last_value), default=last_value)
     if not package:
         print_error("[!] Package name is required.")
         return None
@@ -302,12 +379,21 @@ def require_package_name(prompt="Enter package name: "):
     if not valid:
         print_error(f"[!] {err}")
         return None
+    
+    # Save to config
+    session_config.set(config_key, package)
     return package
 
 
-def require_file_path(prompt="Enter file path: ", must_exist=True, file_type=None):
-    """Get and validate file path from user"""
-    path = safe_input(prompt, allow_empty=False)
+def require_file_path(prompt="Enter file path", must_exist=True, file_type=None, config_key=None):
+    """Get and validate file path from user with persistence"""
+    last_value = session_config.get(config_key, "") if config_key else ""
+    if last_value:
+        display_prompt = f"{prompt} [{last_value}]: "
+    else:
+        display_prompt = f"{prompt}: "
+    
+    path = safe_input(display_prompt, allow_empty=bool(last_value), default=last_value)
     if not path:
         print_error("[!] File path is required.")
         return None
@@ -315,6 +401,10 @@ def require_file_path(prompt="Enter file path: ", must_exist=True, file_type=Non
     if not valid:
         print_error(f"[!] {err}")
         return None
+    
+    # Save to config
+    if config_key:
+        session_config.set(config_key, path)
     return path
 
 
@@ -382,7 +472,7 @@ def handle_option_3():
 
 def handle_option_4():
     """Handle: Get PID for package name"""
-    package = require_package_name("Enter package name (e.g. com.example.app): ")
+    package = require_package_name("Enter package name (e.g. com.example.app)")
     if not package:
         return
     
@@ -403,7 +493,7 @@ def handle_option_4():
 
 def handle_option_5():
     """Handle: Install APK via ADB"""
-    apk_path = require_file_path("Enter APK file path to install: ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK file path to install", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -423,7 +513,7 @@ def handle_option_5():
 
 def handle_option_6():
     """Handle: Uninstall APK via ADB"""
-    package = require_package_name("Enter package name to uninstall: ")
+    package = require_package_name("Enter package name to uninstall")
     if not package:
         return
     
@@ -614,7 +704,7 @@ def handle_option_15():
     print_info("[i] Make sure the target app is running on the device.")
     
     device_id = safe_input("Enter device ID (optional): ", allow_empty=True)
-    package = require_package_name("Enter package name (required): ")
+    package = require_package_name("Enter package name (required)")
     if not package:
         return
     
@@ -644,7 +734,7 @@ def handle_option_15():
 
 def handle_option_16():
     """Handle: APKTool decompile APK"""
-    apk_path = require_file_path("Enter APK file path to decompile: ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK file path to decompile", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -673,7 +763,7 @@ def handle_option_16():
 
 def handle_option_17():
     """Handle: Run APKLeaks on APK"""
-    apk_path = require_file_path("Enter APK file path to scan: ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK file path to scan", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -698,7 +788,7 @@ def handle_option_17():
 
 def handle_option_18():
     """Handle: Extract app data directory"""
-    package = require_package_name("Enter package name to extract data for: ")
+    package = require_package_name("Enter package name to extract data for")
     if not package:
         return
     
@@ -722,7 +812,7 @@ def handle_option_18():
 
 def handle_option_19():
     """Handle: Run apk-components-inspector"""
-    apk_path = require_file_path("Enter APK file path to analyze: ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK file path to analyze", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -743,7 +833,7 @@ def handle_option_19():
 
 def handle_option_20():
     """Handle: Run frida-script-gen"""
-    apk_path = require_file_path("Enter APK file path (required): ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK file path (required)", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -768,7 +858,7 @@ def handle_option_20():
 def handle_option_21():
     """Handle: Run MobApp-Storage-Inspector"""
     print_warning("Launching MobApp-Storage-Inspector GUI...")
-    apk_path = require_file_path("Enter APK file path (required): ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK file path (required)", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -807,7 +897,7 @@ def handle_option_23():
     try:
         from objection_module import ObjectionTester
         
-        package = require_package_name("Enter package name to test: ")
+        package = require_package_name("Enter package name to test")
         if not package:
             return
         
@@ -860,7 +950,7 @@ def handle_option_26():
     """Handle: Automated Backup/Restore"""
     print_warning("\nAutomated Backup/Restore")
     
-    package = require_package_name("Enter package name to backup/restore: ")
+    package = require_package_name("Enter package name to backup/restore")
     if not package:
         return
     
@@ -893,7 +983,7 @@ def handle_option_27():
     """Handle: App Repackaging Utility"""
     print_warning("\nApp Repackaging Utility")
     
-    apk_path = require_file_path("Enter APK path to repackage: ", must_exist=True, file_type='.apk')
+    apk_path = require_file_path("Enter APK path to repackage", must_exist=True, file_type='.apk', config_key="last_apk_path")
     if not apk_path:
         return
     
@@ -910,7 +1000,7 @@ def handle_option_28():
     """Handle: Automated Uninstall/Cleaner"""
     print_warning("\nAutomated Uninstall/Cleaner")
     
-    package = require_package_name("Enter package name to uninstall and clean: ")
+    package = require_package_name("Enter package name to uninstall and clean")
     if not package:
         return
     
@@ -1027,6 +1117,213 @@ def handle_option_29():
     pause()
 
 
+def handle_option_30():
+    """Handle: AI Security Analyzer"""
+    print_warning("\n🤖 AI Security Analyzer")
+    print_info("AI-powered source code analysis for security vulnerabilities")
+    print("")
+    
+    try:
+        from ai_analyzer import AISecurityAnalyzer, AIConfig
+    except ImportError as e:
+        print_error(f"[!] Could not import ai_analyzer module: {e}")
+        pause()
+        return
+    
+    # Select AI provider
+    print(f"{colors.WHITE}Select AI Provider:{colors.RESET}")
+    print(f"{colors.CYAN}1.{colors.RESET} Ollama (local, free, private)")
+    print(f"{colors.CYAN}2.{colors.RESET} Siemens AI API")
+    print(f"{colors.CYAN}3.{colors.RESET} OpenAI API")
+    print(f"{colors.CYAN}4.{colors.RESET} Custom API (Azure/other)")
+    print(f"{colors.CYAN}b.{colors.RESET} Back to main menu")
+    
+    provider_choice = safe_input("\nSelect provider [1-4] or 'b': ", allow_empty=True, default='1')
+    if not provider_choice or provider_choice.lower() == 'b':
+        return
+    
+    # Initialize analyzer based on choice
+    try:
+        if provider_choice == '1':
+            # Ollama (local)
+            analyzer = AISecurityAnalyzer(provider="ollama")
+            ok, msg = analyzer.check_ollama_status()
+            if not ok:
+                print_error(f"[!] {msg}")
+                print_info("[i] Start Ollama with: ollama serve")
+                print_info(f"[i] Pull model with: ollama pull {AIConfig.OLLAMA_MODEL}")
+                pause()
+                return
+            print_success(f"[+] {msg}")
+            
+        elif provider_choice == '2':
+            # Siemens AI API
+            print_info(f"\n[i] Siemens AI API")
+            print_info(f"[i] Endpoint: {AIConfig.SIEMENS_BASE_URL}")
+            print_info(f"[i] Model: {AIConfig.SIEMENS_MODEL}")
+            
+            # Get API key (SIAK-xxx format)
+            last_key = session_config.get("siemens_api_key", "")
+            if last_key:
+                masked_key = last_key[:10] + "..." + last_key[-4:] if len(last_key) > 14 else "****"
+                api_key = safe_input(f"Enter Siemens API key (SIAK-xxx) [{masked_key}]: ", allow_empty=True, default=last_key)
+            else:
+                api_key = safe_input("Enter Siemens API key (SIAK-xxx): ", allow_empty=False)
+            
+            if not api_key:
+                print_error("[!] API key is required")
+                pause()
+                return
+            
+            # Validate key format
+            if not api_key.startswith("SIAK-"):
+                print_warning("[!] Warning: Siemens API keys typically start with 'SIAK-'")
+            
+            # Save key for next time
+            session_config.set("siemens_api_key", api_key)
+            
+            analyzer = AISecurityAnalyzer(
+                provider="openai", 
+                api_key=api_key, 
+                base_url=AIConfig.SIEMENS_BASE_URL, 
+                model=AIConfig.SIEMENS_MODEL
+            )
+            print_success(f"[+] Using Siemens AI API ({AIConfig.SIEMENS_MODEL})")
+            
+        elif provider_choice == '3':
+            # OpenAI API
+            api_key = safe_input("Enter OpenAI API key (or press Enter if set in env): ", allow_empty=True)
+            
+            # Detect if user accidentally entered Siemens key
+            if api_key and api_key.startswith("SIAK-"):
+                print_error("[!] You entered a Siemens API key (SIAK-xxx) but selected OpenAI.")
+                print_info("[i] Please select option 2 (Siemens AI API) instead.")
+                pause()
+                return
+            
+            analyzer = AISecurityAnalyzer(provider="openai", api_key=api_key if api_key else None)
+            print_success("[+] Using OpenAI API")
+            
+        elif provider_choice == '4':
+            # Custom API (Azure, etc.)
+            print_info("\n[i] Configure Custom API:")
+            
+            # Get last used values
+            last_url = session_config.get("last_custom_api_url", "")
+            last_model = session_config.get("last_custom_api_model", "gpt-4")
+            
+            base_url = safe_input(f"Enter API base URL [{last_url}]: ", allow_empty=bool(last_url), default=last_url)
+            if not base_url:
+                print_error("[!] API base URL is required")
+                pause()
+                return
+            
+            model = safe_input(f"Enter model name [{last_model}]: ", allow_empty=True, default=last_model)
+            api_key = safe_input("Enter API key: ", allow_empty=False)
+            if not api_key:
+                print_error("[!] API key is required")
+                pause()
+                return
+            
+            # Save for next time
+            session_config.set("last_custom_api_url", base_url)
+            session_config.set("last_custom_api_model", model)
+            
+            analyzer = AISecurityAnalyzer(provider="openai", api_key=api_key, base_url=base_url, model=model)
+            print_success(f"[+] Using Custom API: {base_url}")
+        else:
+            return
+            
+    except Exception as e:
+        print_error(f"[!] Failed to initialize analyzer: {e}")
+        pause()
+        return
+    
+    # Test API connection before proceeding
+    print_info("\n[*] Testing API connection...")
+    ok, msg = analyzer.test_api_connection()
+    if ok:
+        print_success(f"[+] {msg}")
+    else:
+        print_error(f"[!] {msg}")
+        pause()
+        return
+    
+    # Enable verbose mode by default to see AI responses
+    analyzer.verbose = True
+    
+    # Select analysis mode
+    print(f"\n{colors.WHITE}Select Analysis Mode:{colors.RESET}")
+    print(f"{colors.CYAN}1.{colors.RESET} Analyze decompiled source directory (JADX output)")
+    print(f"{colors.CYAN}2.{colors.RESET} Analyze a single file (Java, Kotlin, XML, Python, Smali, etc.)")
+    print_info("[i] Use option [16] to decompile APK first")
+    
+    mode = safe_input("\nSelect mode [1-2]: ", allow_empty=True, default='1')
+    
+    if mode == '1':
+        # Directory analysis
+        default_dir = "output/decompiled/jadx"
+        last_dir = session_config.get("last_jadx_dir", default_dir)
+        source_dir = safe_input(f"Enter source directory [{last_dir}]: ", allow_empty=True, default=last_dir)
+        
+        if not os.path.isdir(source_dir):
+            print_error(f"[!] Directory not found: {source_dir}")
+            print_info("[i] Decompile APK first using option [16]")
+            pause()
+            return
+        
+        session_config.set("last_jadx_dir", source_dir)
+        
+        print_warning(f"\n[*] Scanning {source_dir}...")
+        print_info("[i] This may take a few minutes depending on codebase size...")
+        
+        findings = analyzer.scan_directory(source_dir)
+        
+    elif mode == '2':
+        # Single file analysis (any file type)
+        filepath = require_file_path("Enter file path", must_exist=True, file_type=None)
+        if not filepath:
+            return
+        
+        print_warning(f"\n[*] Analyzing {filepath}...")
+        
+        code = open(filepath, 'r', encoding='utf-8', errors='ignore').read()
+        result = analyzer.analyze_code(code, os.path.basename(filepath))
+        
+        if result.get("findings"):
+            analyzer.findings = result["findings"]
+            analyzer.analyzed_files = [filepath]
+    else:
+        return
+    
+    # Show results
+    if not analyzer.findings:
+        print_warning("\n[i] No security findings detected.")
+    else:
+        # Generate and display report
+        report = analyzer.generate_report()
+        print("\n" + report)
+        
+        # Save options
+        print(f"\n{colors.WHITE}Save Options:{colors.RESET}")
+        print(f"{colors.CYAN}1.{colors.RESET} Save report to file")
+        print(f"{colors.CYAN}2.{colors.RESET} Export as JSON")
+        print(f"{colors.CYAN}3.{colors.RESET} Both")
+        print(f"{colors.CYAN}s.{colors.RESET} Skip saving")
+        
+        save_choice = safe_input("\nSelect option [1-3] or 's': ", allow_empty=True, default='s')
+        
+        if save_choice in ['1', '3']:
+            report_path = safe_input("Enter report path [output/ai_report.txt]: ", allow_empty=True, default="output/ai_report.txt")
+            analyzer.generate_report(report_path)
+        
+        if save_choice in ['2', '3']:
+            json_path = safe_input("Enter JSON path [output/ai_findings.json]: ", allow_empty=True, default="output/ai_findings.json")
+            analyzer.export_json(json_path)
+    
+    pause()
+
+
 # =============================================================================
 # MAIN LOOP
 # =============================================================================
@@ -1044,6 +1341,18 @@ def main():
         print("[+] Tab completion enabled for file paths")
     
     print_banner()
+    
+    # Show saved config if any
+    last_apk = session_config.get("last_apk_path")
+    last_pkg = session_config.get("last_package_name")
+    if last_apk or last_pkg:
+        print(f"{colors.CYAN}[Session]{colors.RESET} Remembered settings (press Enter to use):")
+        if last_apk:
+            print(f"  APK: {last_apk}")
+        if last_pkg:
+            print(f"  Package: {last_pkg}")
+        print("")
+    
     help_text = get_help_text()
     
     # Menu handler mapping
@@ -1077,13 +1386,14 @@ def main():
         27: handle_option_27,
         28: handle_option_28,
         29: handle_option_29,
-        30: lambda: sys.exit(0),
+        30: handle_option_30,
+        31: lambda: sys.exit(0),
     }
     
     while True:
         try:
             print_menu()
-            choice = safe_input("Select an option [1-30], 'b' to return, or 'h' for help: ", allow_empty=True, default='')
+            choice = safe_input("Select an option [1-31], 'b' to return, or 'h' for help: ", allow_empty=True, default='')
             
             if choice is None or choice == '':
                 continue

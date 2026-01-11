@@ -187,8 +187,8 @@ def validate_file_path(path: str, must_exist: bool = True, file_type: str = None
     if must_exist and not os.path.exists(path):
         return False, f"File not found: {path}"
     
-    if file_type and not path.lower().endswith(file_type.lower()):
-        return False, f"Expected {file_type} file, got: {path}"
+    # Note: file_type validation removed to support analyzing any file type
+    # (Java, Kotlin, XML, Python, Smali, etc.)
     
     return True, ""
 
