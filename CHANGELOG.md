@@ -5,37 +5,6 @@ All notable changes to Android Pentesting Suite will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.6.0] - 2026-01-08
-
-### Added
-- **🤖 AI Security Analyzer** - NEW FEATURE
-  - AI-powered source code analysis for security vulnerabilities
-  - Supports Ollama (local, free) and OpenAI API
-  - Detects: hardcoded secrets, insecure crypto, SQL injection, WebView issues, etc.
-  - Generates detailed reports with severity, CWE IDs, and recommendations
-  - Auto-prioritizes security-relevant files (MainActivity, LoginActivity, etc.)
-  - Export findings as JSON or text report
-- New menu option `[30] AI Security Analyzer`
-- New module `ai_analyzer.py` with `AISecurityAnalyzer` class
-
-### Dependencies (optional)
-- `requests` - For Ollama API (local)
-- `openai` - For OpenAI API (cloud)
-
-## [2.5.3] - 2026-01-08
-
-### Added
-- **Config Persistence** - Settings now saved between sessions
-  - `SessionConfig` class stores user preferences to `.session_config.json`
-  - Remembers: last APK path, last package name, device IP, output dir
-  - Press Enter to reuse last value when prompted
-- Shows saved settings on startup
-
-### Changed
-- `require_package_name()` now supports `config_key` for persistence
-- `require_file_path()` now supports `config_key` for persistence
-- Prompts show last used value in brackets: `Enter APK path [/last/path.apk]:`
-
 ## [2.5.2] - 2026-01-08
 
 ### Added

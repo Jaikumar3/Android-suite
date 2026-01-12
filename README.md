@@ -63,20 +63,15 @@ The suite provides the following **30 features** via its menu:
 - **Output** - JSON reports + shell scripts with ADB test commands
 
 ### Usage
+```python
+from android_pentest import AndroidPentester
+p = AndroidPentester()
 
-**Via Menu (Recommended):**
-```bash
-python3 main.py
-# Select Option 29 for Deep Link Security Tester
-```
-
-**Command Line:**
-```bash
-# Offline analysis - generates reconnaissance report
-python3 -c "from android_pentest import AndroidPentester; p = AndroidPentester(); p.run_deeplink_offline_analysis(apk_path=r'path/to/app.apk')"
+# Offline mode - just APK path (auto-discovers/decompiles manifest)
+p.run_deeplink_offline_analysis(apk_path=r'path\to\app.apk')
 
 # Full test mode - requires connected device
-python3 -c "from android_pentest import AndroidPentester; p = AndroidPentester(); p.run_deeplink_security_test(apk_path=r'path/to/app.apk')"
+p.run_deeplink_security_test(apk_path=r'path\to\app.apk')
 ```
 
 ## Quick Start
@@ -92,7 +87,7 @@ cd Android-suite
 pip install -r requirements.txt
 
 # Run the tool
-python3 main.py
+python main.py
 ```
 
 ### First Run
